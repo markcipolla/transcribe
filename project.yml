@@ -1,0 +1,71 @@
+# XcodeGen spec. `make project` turns this into Transcribe.xcodeproj, which is
+# not committed.
+name: Transcribe
+
+options:
+  bundleIdPrefix: com.markcipolla
+  deploymentTarget:
+    macOS: "14.4"
+  createIntermediateGroups: true
+
+packages:
+  TranscribeKit:
+    path: Packages/TranscribeKit
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.6.0
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    DEVELOPMENT_TEAM: 7UB7J68BJQ
+    ENABLE_HARDENED_RUNTIME: YES
+    # Apple silicon only: Voz runs on the Neural Engine and uses Float16,
+    # which does not exist on Intel Macs. Release builds also pass ARCHS=arm64
+    # on the command line, since this does not reach the package targets.
+    ARCHS: arm64
+    DEAD_CODE_STRIPPING: YES
+
+targets:
+  Transcribe:
+    type: application
+    platform: macOS
+    sources:
+      - path: Transcribe
+    dependencies:
+      - package: TranscribeKit
+        product: TranscribeKit
+      - package: Sparkle
+    info:
+      path: Transcribe/Info.plist
+      properties:
+        CFBundleDisplayName: Transcribe
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: Copyright © 2026 Mark Cipolla
+        NSMicrophoneUsageDescription: Transcribe listens to your microphone during meetings so your side of the conversation is in the transcript. Audio never leaves your Mac.
+        NSAudioCaptureUsageDescription: Transcribe records the meeting audio playing on this Mac so the other participants are in the transcript. Audio never leaves your Mac.
+        NSAppleEventsUsageDescription: Transcribe reads your browser's list of open tabs to recognise when you are in a Google Meet or Teams call. Nothing else is read.
+        SUFeedURL: $(SPARKLE_FEED_URL)
+        SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
+    entitlements:
+      path: Transcribe/Transcribe.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+        com.apple.security.automation.apple-events: true
+    settings:
+      base:
+        PRODUCT_NAME: Transcribe
+        PRODUCT_BUNDLE_IDENTIFIER: com.markcipolla.Transcribe
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Sparkle. The feed is the appcast attached to the newest GitHub
+        # release. The public key comes from `make sparkle-key`; until it is
+        # set, the updater stays off (see Updater.swift).
+        SPARKLE_FEED_URL: https://github.com/markcipolla/transcribe/releases/latest/download/appcast.xml
+        SPARKLE_PUBLIC_KEY: ""
