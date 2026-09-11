@@ -80,6 +80,7 @@ final class AppModel {
     func checkForModelUpdates() {
         Task { await engine.checkForUpdate() }
         Task { await titleWriter.checkForUpdate() }
+        Task { await tagger.checkForUpdate() }
     }
 
     // MARK: - Detection
@@ -134,7 +135,7 @@ final class AppModel {
             systemLabel: settings.othersLabel.isEmpty ? "Others" : settings.othersLabel)
         let session = RecordingSession(metadata: metadata, directory: directory,
                                        captureMicrophone: settings.captureMicrophone, engine: engine,
-                                       tagger: tagger,
+                                       tagger: settings.tagTopics ? tagger : nil,
                                        titleWriter: settings.writeTitles ? titleWriter : nil)
         do {
             try await session.start()
@@ -147,9 +148,11 @@ final class AppModel {
         sessionMeeting = meeting
         meetingGoneSince = nil
         lastError = nil
-        // The first time, the title model downloads during the meeting, in
-        // plenty of time for its end.
+        // The first time, the title and topic models download during the
+        // meeting, in plenty of time for its end. The topic model also loads
+        // now, so tagging is instant when the meeting ends.
         if settings.writeTitles { downloadTitleModel() }
+        if settings.tagTopics { downloadTopicModel() }
         if settings.notifications, meeting != nil {
             notifier.post(title: "Transcribing \(metadata.displayTitle)",
                           body: "Saving to \(session.fileURL.lastPathComponent)")
@@ -189,6 +192,11 @@ final class AppModel {
     func downloadTitleModel() {
         guard !titleWriter.isDownloaded else { return }
         Task { try? await titleWriter.download() }
+    }
+
+    /// Download the topic model if needed, and load it.
+    func downloadTopicModel() {
+        Task { try? await tagger.download() }
     }
 
     // MARK: - Files

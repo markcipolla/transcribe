@@ -93,6 +93,7 @@ func transcribeFile(_ path: String, source: AudioSource, title: Bool) async thro
 }
 
 /// Tag a transcript the app saved, reading its speaker turns back out of the Markdown.
+@MainActor
 func tagTranscript(_ path: String) async throws {
     let segments = try transcriptSegments(path)
     let passages = TopicPassages.passages(from: segments)
