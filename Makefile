@@ -5,7 +5,7 @@ CONFIG ?= Release
 APP := $(DERIVED)/Build/Products/$(CONFIG)/Transcribe.app
 PACKAGE := Packages/TranscribeKit
 
-.PHONY: project open build run test test-core sparkle-key release clean
+.PHONY: project open metal build run cli test test-core sparkle-key release clean
 
 ## project: generate Transcribe.xcodeproj from project.yml (needs `brew install xcodegen`)
 project:
@@ -15,15 +15,26 @@ project:
 open: project
 	open Transcribe.xcodeproj
 
+## metal: install Xcode's Metal Toolchain, which MLX needs for its shaders (once per Xcode)
+metal:
+	@xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+
 ## build: build the app (CONFIG=Debug for a debug build)
-build: project
+build: project metal
 	xcodebuild -project Transcribe.xcodeproj -scheme Transcribe -configuration $(CONFIG) \
-		-derivedDataPath $(DERIVED) -skipPackagePluginValidation ARCHS=arm64 build -quiet
+		-derivedDataPath $(DERIVED) -skipPackagePluginValidation -skipMacroValidation ARCHS=arm64 build -quiet
 
 ## run: build and launch the app
 run: build
 	-pkill -x Transcribe
 	open $(APP)
+
+## cli: build transcribe-cli with Xcode, which unlike `swift build` compiles the MLX shaders
+##      that `transcribe-cli title` needs. Runs as .build/cli/Build/Products/$(CONFIG)/transcribe-cli
+cli: metal
+	cd $(PACKAGE) && xcodebuild -scheme transcribe-cli -destination 'platform=macOS,arch=arm64,variant=macos' \
+		-configuration $(CONFIG) -derivedDataPath $(CURDIR)/.build/cli \
+		-skipPackagePluginValidation -skipMacroValidation build -quiet
 
 ## test: all package tests (macOS)
 test:

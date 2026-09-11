@@ -12,6 +12,7 @@ final class Settings {
         static let speakerName = "speakerName"
         static let othersLabel = "othersLabel"
         static let notifications = "notifications"
+        static let writeTitles = "writeTitles"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -39,6 +40,10 @@ final class Settings {
     var notifications: Bool {
         didSet { defaults.set(notifications, forKey: Key.notifications) }
     }
+    /// Title and describe each meeting when it ends.
+    var writeTitles: Bool {
+        didSet { defaults.set(writeTitles, forKey: Key.writeTitles) }
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -48,6 +53,7 @@ final class Settings {
         speakerName = defaults.string(forKey: Key.speakerName) ?? Self.defaultSpeakerName
         othersLabel = defaults.string(forKey: Key.othersLabel) ?? "Others"
         notifications = defaults.object(forKey: Key.notifications) as? Bool ?? true
+        writeTitles = defaults.object(forKey: Key.writeTitles) as? Bool ?? true
     }
 
     /// Your first name, from your macOS account.

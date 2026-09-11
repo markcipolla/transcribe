@@ -52,6 +52,22 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section {
+                Toggle("Title and describe each meeting", isOn: $settings.writeTitles)
+                if settings.writeTitles {
+                    TitleModelStatus()
+                }
+            } header: {
+                Text("Titles")
+            } footer: {
+                Text("When a call ends, Title by Desert Ant Labs reads the transcript and writes a sentence or two about it. It also names calls that have no name of their own, such as Teams calls, Slack huddles and recordings you start yourself.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .onChange(of: settings.writeTitles) { _, on in
+                if on { model.downloadTitleModel() }
+            }
+
             PermissionsSection()
 
             Section("General") {
@@ -65,7 +81,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: Self.version)
-                Text("Speech recognition by [Voz](https://desertant.com/models/voz/) from Desert Ant Labs, built on NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0).")
+                Text("Speech recognition by [Voz](https://desertant.com/models/voz/) from Desert Ant Labs, built on NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0). Titles by [Title](https://desertant.com/models/title/) from Desert Ant Labs, built on IBM Granite 4.0 350M (Apache 2.0).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -80,6 +96,39 @@ struct SettingsView: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "\(short) (\(build))"
+    }
+}
+
+private struct TitleModelStatus: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        switch model.titleWriter.state {
+        case .notDownloaded:
+            HStack {
+                Label("Model not downloaded (286 MB)", systemImage: "arrow.down.circle")
+                    .font(.callout)
+                Spacer()
+                Button("Download") { model.downloadTitleModel() }
+            }
+        case .downloading(let progress):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Downloading title model… \(Int(progress * 100))%").font(.callout)
+                ProgressView(value: progress)
+            }
+        case .downloaded:
+            Label("Ready. Runs on this Mac's GPU.", systemImage: "checkmark.circle.fill")
+                .font(.callout)
+                .foregroundStyle(.green)
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 4) {
+                Label("The title model could not download", systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                Button("Try Again") { model.downloadTitleModel() }
+            }
+        }
     }
 }
 

@@ -17,8 +17,10 @@ public final class RecordingSession {
         case finished
     }
 
-    public let metadata: TranscriptMetadata
-    public let fileURL: URL
+    /// Gains a title and description when the recording is finished.
+    public private(set) var metadata: TranscriptMetadata
+    /// Changes when a written title renames the file.
+    public private(set) var fileURL: URL
     public private(set) var state: State = .recording
     public private(set) var endedAt: Date?
     /// Problems worth showing, such as a chunk that failed to transcribe.
@@ -33,6 +35,7 @@ public final class RecordingSession {
 
     @ObservationIgnored private let engine: TranscriptionEngine
     @ObservationIgnored private let tagger: TopicTagger
+    @ObservationIgnored private let titleWriter: TitleWriter?
     @ObservationIgnored private let file: TranscriptFile
     @ObservationIgnored private let router: ChunkRouter
     @ObservationIgnored private var microphone: MicrophoneCapture?
@@ -44,18 +47,23 @@ public final class RecordingSession {
     /// the file on disk trails the meeting by under a minute.
     public static let chunkDuration: TimeInterval = 30
 
+    /// - Parameter titleWriter: names and describes the meeting once it ends.
+    ///   Nil leaves the transcript as it was started.
     public init(
         metadata: TranscriptMetadata,
         directory: URL,
         captureMicrophone: Bool,
         engine: TranscriptionEngine,
-        tagger: TopicTagger
+        tagger: TopicTagger,
+        titleWriter: TitleWriter? = nil
     ) {
         self.metadata = metadata
         self.engine = engine
         self.tagger = tagger
+        self.titleWriter = titleWriter
         self.capturesMicrophone = captureMicrophone
-        fileURL = TranscriptFileNamer.uniqueURL(in: directory, for: metadata)
+        let fileURL = TranscriptFileNamer.uniqueURL(in: directory, for: metadata)
+        self.fileURL = fileURL
         file = TranscriptFile(url: fileURL, metadata: metadata)
         router = ChunkRouter(startedAt: metadata.startedAt,
                              sampleRate: TranscriptionEngine.sampleRate,
@@ -132,6 +140,7 @@ public final class RecordingSession {
             wasDiscarded = true
             log.info("No speech; discarded \(self.fileURL.lastPathComponent, privacy: .public)")
         } else {
+            await writeTitle()
             do {
                 // Saved before tagging, so a topic model that is still
                 // downloading cannot hold up the transcript.
@@ -145,6 +154,25 @@ public final class RecordingSession {
             log.info("Finished \(self.fileURL.lastPathComponent, privacy: .public)")
         }
         state = .finished
+    }
+
+    /// Title and describe the finished meeting, renaming the file when the
+    /// title is new. Takes a second or two; without the model it does nothing.
+    private func writeTitle() async {
+        guard let titleWriter,
+              let summary = await titleWriter.describe(await file.segments) else { return }
+        let old = metadata
+        metadata.apply(summary)
+        await file.apply(summary)
+        guard TranscriptFileNamer.fileName(for: metadata) != TranscriptFileNamer.fileName(for: old) else { return }
+        let renamed = TranscriptFileNamer.uniqueURL(in: fileURL.deletingLastPathComponent(), for: metadata)
+        do {
+            try await file.move(to: renamed)
+            fileURL = renamed
+        } catch {
+            // The title is still inside the file; only the name is generic.
+            log.error("Could not rename to \(renamed.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// When a source last delivered sound, so the UI can show that audio is
