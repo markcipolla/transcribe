@@ -1,12 +1,12 @@
 import AppKit
 import Foundation
 
-/// Notices Google Meet and Microsoft Teams calls.
+/// Notices Google Meet, Microsoft Teams and Slack huddle calls.
 ///
 /// A call is an app from ``MeetingClassifier`` holding the microphone open.
 /// For a browser that alone is not enough, since a browser uses the microphone
-/// for plenty besides meetings, so its tabs are checked for a Meet or Teams
-/// page. Tab reads go through AppleScript and are cached briefly, because
+/// for plenty besides meetings, so its tabs are checked for a Meet, Teams or
+/// Slack page. Tab reads go through AppleScript and are cached briefly, because
 /// detection polls every couple of seconds.
 public actor MeetingDetector {
     private struct CachedTabs {
@@ -25,13 +25,13 @@ public actor MeetingDetector {
     public func detect() async -> DetectedMeeting? {
         let apps = Self.microphoneApps()
         var unverifiedBrowser: DetectedMeeting?
-        var nativeTeams: DetectedMeeting?
+        var meetingApp: DetectedMeeting?
 
         for app in apps {
             switch MeetingClassifier.kind(ofApp: app) {
-            case .teams:
-                nativeTeams = nativeTeams ?? DetectedMeeting(
-                    platform: .teams, appBundleID: app, appName: Self.name(of: app), title: nil)
+            case .meetingApp(let platform):
+                meetingApp = meetingApp ?? DetectedMeeting(
+                    platform: platform, appBundleID: app, appName: Self.name(of: app), title: nil)
             case .browser(let scripting):
                 guard let tabs = await tabs(of: app, scripting: scripting) else {
                     unverifiedBrowser = unverifiedBrowser ?? DetectedMeeting(
@@ -47,7 +47,7 @@ public actor MeetingDetector {
                 continue
             }
         }
-        return nativeTeams ?? unverifiedBrowser
+        return meetingApp ?? unverifiedBrowser
     }
 
     /// Whether the app that revealed `meeting` still has the microphone open.

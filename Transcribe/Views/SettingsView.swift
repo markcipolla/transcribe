@@ -37,7 +37,7 @@ struct SettingsView: View {
             } header: {
                 Text("Recording")
             } footer: {
-                Text("Calls are detected when Google Meet (in Chrome, Safari, Edge, Arc or Brave) or Microsoft Teams is using the microphone. Recording stops shortly after the call ends.")
+                Text("Calls are detected when Google Meet (in Chrome, Safari, Edge, Arc or Brave), Microsoft Teams or a Slack huddle is using the microphone. Recording stops shortly after the call ends.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -116,7 +116,7 @@ private struct PermissionsSection: View {
                 Button("Open System Settings") { open("Privacy_Automation") }
             } label: {
                 Text("Browser automation")
-                Text("Reads your browser's tab list to recognise a Meet or Teams call. Nothing else is read.")
+                Text("Reads your browser's tab list to recognise a Meet, Teams or Slack call. Nothing else is read.")
             }
         } header: {
             Text("Permissions")
