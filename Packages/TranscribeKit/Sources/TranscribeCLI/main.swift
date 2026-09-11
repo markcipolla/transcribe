@@ -4,16 +4,23 @@ import TranscribeKit
 
 // Development tool for exercising the pipeline without the app:
 //
-//   transcribe-cli file <audio> [--as system|microphone]
+//   transcribe-cli file <audio> [--as system|microphone] [--title]
 //       Runs a file through the same chunking and transcription as a live
-//       recording and prints the Markdown transcript.
+//       recording and prints the Markdown transcript, titled like the app's
+//       with --title.
 //   transcribe-cli detect
 //       Prints the apps using the microphone and the meeting detected, if any.
 //   transcribe-cli record <seconds> [directory]
 //       Records system audio and the microphone, like the app does.
+//   transcribe-cli title <transcript.md | text file>
+//       Writes a title and description the way the app does when a meeting
+//       ends.
+//
+// Titles need the MLX shaders, which only Xcode builds: for --title and
+// `title`, build with `make cli` rather than `swift run`.
 
 @MainActor
-func transcribeFile(_ path: String, source: AudioSource) async throws {
+func transcribeFile(_ path: String, source: AudioSource, title: Bool) async throws {
     let url = URL(fileURLWithPath: path)
     let file = try AVAudioFile(forReading: url)
     let rate = TranscriptionEngine.sampleRate
@@ -65,12 +72,55 @@ func transcribeFile(_ path: String, source: AudioSource) async throws {
     let elapsed = Date().timeIntervalSince(transcribeStart)
     print("Transcribed in \(String(format: "%.2f", elapsed)) s (\(String(format: "%.0f", Double(samples.count) / rate / elapsed))x realtime)\n")
 
-    let metadata = TranscriptMetadata(title: url.deletingPathExtension().lastPathComponent,
+    var metadata = TranscriptMetadata(title: title ? nil : url.deletingPathExtension().lastPathComponent,
                                       platform: .manual, startedAt: Date())
+    let segments = TranscriptBuilder.segments(from: words)
+    if title {
+        let writer = try await downloadedTitleWriter()
+        let started = Date()
+        if let summary = await writer.describe(segments) {
+            metadata.apply(summary)
+        }
+        print("Titled in \(String(format: "%.1f", Date().timeIntervalSince(started))) s\n")
+    }
     print(TranscriptRenderer.markdown(metadata: metadata,
-                                      segments: TranscriptBuilder.segments(from: words),
+                                      segments: segments,
                                       duration: Double(samples.count) / rate,
                                       inProgress: false))
+}
+
+/// Title a transcript this app wrote, or any text file.
+@MainActor
+func title(_ path: String) async throws {
+    let text = try String(contentsOfFile: path, encoding: .utf8)
+    // Transcript lines look like `**[00:01:02] Mark:** words`.
+    let turns = text.split(separator: "\n").compactMap { line -> TranscriptSegment? in
+        guard line.hasPrefix("**["), let end = line.range(of: ":** ") else { return nil }
+        return TranscriptSegment(source: .system, start: 0, end: 0, text: String(line[end.upperBound...]))
+    }
+    let passage = turns.isEmpty ? text : TitlePassage.text(from: turns)
+    let writer = try await downloadedTitleWriter()
+    let started = Date()
+    guard let summary = await writer.describe(passage: passage) else {
+        throw CLIError("the model wrote no usable title")
+    }
+    print("""
+        \(passage.split(whereSeparator: \.isWhitespace).count) words in, \
+        \(String(format: "%.1f", Date().timeIntervalSince(started))) s
+
+        Title: \(summary.title)
+        Description: \(summary.description)
+        """)
+}
+
+@MainActor
+func downloadedTitleWriter() async throws -> TitleWriter {
+    let writer = TitleWriter()
+    if !writer.isDownloaded {
+        print("Downloading the title model…")
+        try await writer.download()
+    }
+    return writer
 }
 
 func detect() async {
@@ -109,7 +159,9 @@ do {
     switch arguments.first {
     case "file" where arguments.count >= 2:
         let source: AudioSource = arguments.contains("microphone") ? .microphone : .system
-        try await transcribeFile(arguments[1], source: source)
+        try await transcribeFile(arguments[1], source: source, title: arguments.contains("--title"))
+    case "title" where arguments.count >= 2:
+        try await title(arguments[1])
     case "detect":
         await detect()
     case "record" where arguments.count >= 2:
@@ -118,7 +170,7 @@ do {
             : FileManager.default.temporaryDirectory
         try await record(seconds: Double(arguments[1]) ?? 10, directory: directory)
     default:
-        print("usage: transcribe-cli file <audio> [--as microphone] | detect | record <seconds> [directory]")
+        print("usage: transcribe-cli file <audio> [--as microphone] [--title] | detect | record <seconds> [directory] | title <file>")
         exit(2)
     }
 } catch {

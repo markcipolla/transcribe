@@ -15,6 +15,7 @@ import TranscribeKit
 final class AppModel {
     let settings: Settings
     let engine = TranscriptionEngine()
+    let titleWriter = TitleWriter()
     let updater: Updater
 
     /// The call currently happening, whether or not it is being recorded.
@@ -120,7 +121,8 @@ final class AppModel {
             microphoneLabel: settings.speakerName.isEmpty ? "Me" : settings.speakerName,
             systemLabel: settings.othersLabel.isEmpty ? "Others" : settings.othersLabel)
         let session = RecordingSession(metadata: metadata, directory: directory,
-                                       captureMicrophone: settings.captureMicrophone, engine: engine)
+                                       captureMicrophone: settings.captureMicrophone, engine: engine,
+                                       titleWriter: settings.writeTitles ? titleWriter : nil)
         do {
             try await session.start()
         } catch {
@@ -132,6 +134,9 @@ final class AppModel {
         sessionMeeting = meeting
         meetingGoneSince = nil
         lastError = nil
+        // The first time, the title model downloads during the meeting, in
+        // plenty of time for its end.
+        if settings.writeTitles { downloadTitleModel() }
         if settings.notifications, meeting != nil {
             notifier.post(title: "Transcribing \(metadata.displayTitle)",
                           body: "Saving to \(session.fileURL.lastPathComponent)")
@@ -166,6 +171,11 @@ final class AppModel {
                           fileURL: session.fileURL)
         }
         updater.recordingFinished()
+    }
+
+    func downloadTitleModel() {
+        guard !titleWriter.isDownloaded else { return }
+        Task { try? await titleWriter.download() }
     }
 
     // MARK: - Files

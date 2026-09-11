@@ -46,6 +46,11 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # MLX (the title model) compiles Metal shaders, and Xcode 26 ships the
+      # Metal Toolchain as a separate download.
+      - name: Install the Metal Toolchain
+        run: xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+
       - name: Cache Swift packages
         uses: actions/cache@v4
         with:
@@ -62,5 +67,5 @@ jobs:
           xcodegen generate --quiet
           xcodebuild build \
             -project Transcribe.xcodeproj -scheme Transcribe -configuration Release \
-            -derivedDataPath .build/xcode -skipPackagePluginValidation \
+            -derivedDataPath .build/xcode -skipPackagePluginValidation -skipMacroValidation \
             ARCHS=arm64 CODE_SIGNING_ALLOWED=NO -quiet

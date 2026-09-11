@@ -3,6 +3,8 @@ import Foundation
 /// What is known about a recording apart from its words.
 public struct TranscriptMetadata: Sendable, Equatable {
     public var title: String?
+    /// A sentence or two about the meeting, written once it has ended.
+    public var description: String?
     public var platform: MeetingPlatform
     public var startedAt: Date
     /// Label for the microphone speaker, usually your name.
@@ -28,6 +30,13 @@ public struct TranscriptMetadata: Sendable, Equatable {
     func label(for source: AudioSource) -> String {
         source == .microphone ? microphoneLabel : systemLabel
     }
+
+    /// Add a written title and description. A meeting that already has a name
+    /// keeps it, since that is what the people in it called it.
+    public mutating func apply(_ summary: MeetingSummary) {
+        if title?.isEmpty ?? true { title = summary.title }
+        description = summary.description
+    }
 }
 
 /// Renders a transcript as Markdown, with YAML front matter so tools such as
@@ -39,9 +48,10 @@ public enum TranscriptRenderer {
         duration: TimeInterval,
         inProgress: Bool
     ) -> String {
-        var lines: [String] = [
-            "---",
-            "title: \(yamlString(metadata.displayTitle))",
+        let description = metadata.description.flatMap { $0.isEmpty ? nil : $0 }
+        var lines: [String] = ["---", "title: \(yamlString(metadata.displayTitle))"]
+        if let description { lines.append("description: \(yamlString(description))") }
+        lines += [
             "date: \(iso8601(metadata.startedAt))",
             "platform: \(yamlString(metadata.platform.rawValue))",
             "duration: \(Int(duration.rounded()))",
@@ -50,6 +60,9 @@ public enum TranscriptRenderer {
             "",
             "# \(metadata.displayTitle)",
             "",
+        ]
+        if let description { lines += [description, ""] }
+        lines += [
             "- **Date:** \(longDate(metadata.startedAt))",
             "- **Platform:** \(metadata.platform.rawValue)",
             "- **Duration:** \(humanDuration(duration))",

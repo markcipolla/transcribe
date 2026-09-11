@@ -53,6 +53,13 @@ mkdir -p .build/release "$DIST"
 step "Generating project"
 xcodegen generate --quiet
 
+# MLX, which runs the title model, compiles Metal shaders, and Xcode 26 ships
+# the Metal Toolchain as a separate download.
+if ! xcrun metal --version >/dev/null 2>&1; then
+    step "Installing the Metal Toolchain"
+    xcodebuild -downloadComponent MetalToolchain
+fi
+
 DEVELOPER_ID=false
 [[ "$IDENTITY" == "Developer ID Application"* ]] && DEVELOPER_ID=true
 
@@ -68,7 +75,8 @@ fi
 step "Archiving $VERSION ($BUILD_NUMBER)"
 xcodebuild archive \
     -project Transcribe.xcodeproj -scheme Transcribe -configuration Release \
-    -derivedDataPath "$DERIVED" -archivePath "$ARCHIVE" -skipPackagePluginValidation \
+    -derivedDataPath "$DERIVED" -archivePath "$ARCHIVE" \
+    -skipPackagePluginValidation -skipMacroValidation \
     ARCHS=arm64 \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$IDENTITY" "${SIGNING[@]}" \
