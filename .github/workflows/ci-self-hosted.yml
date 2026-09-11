@@ -57,10 +57,12 @@ jobs:
           name="swift-$SWIFT_VERSION-RELEASE-ubuntu24.04"
           url="https://download.swift.org/swift-$SWIFT_VERSION-release/ubuntu2404/swift-$SWIFT_VERSION-RELEASE/$name.tar.gz"
           cd "$RUNNER_TEMP"
-          fetch() { curl -fsSL --retry 3 --retry-all-errors -o "$1" "$2"; }
+          fetch() { curl -fsSL --retry 3 --retry-all-errors -o "$1" "$2" "${@:3}"; }
           fetch swift.tar.gz "$url"
           fetch swift.tar.gz.sig "$url.sig"
-          fetch swift-keys.asc https://www.swift.org/keys/all-keys.asc
+          # Apple's CDN sends this file gzipped even unasked, so ask for it
+          # explicitly and let curl decode it.
+          fetch swift-keys.asc https://www.swift.org/keys/all-keys.asc --compressed
           if ! grep -q "BEGIN PGP PUBLIC KEY BLOCK" swift-keys.asc; then
             echo "::error::swift.org did not return its signing keys. First bytes:"
             head -c 300 swift-keys.asc
