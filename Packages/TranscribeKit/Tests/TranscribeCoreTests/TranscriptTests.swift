@@ -125,11 +125,11 @@ struct TranscriptRendererTests {
 
 struct TopicPassagesTests {
     func segments(words count: Int, per turns: Int) -> [TranscriptSegment] {
-        let words = (0..<count).map { "w\($0)" }
-        return stride(from: 0, to: count, by: turns).map { start in
-            TranscriptSegment(source: start / turns % 2 == 0 ? .system : .microphone,
-                              start: Double(start), end: Double(start + 1),
-                              text: words[start..<min(start + turns, count)].joined(separator: " "))
+        let words: [String] = (0..<count).map { "w\($0)" }
+        return stride(from: 0, to: count, by: turns).map { (start: Int) -> TranscriptSegment in
+            let source: AudioSource = (start / turns) % 2 == 0 ? .system : .microphone
+            let text: String = words[start..<min(start + turns, count)].joined(separator: " ")
+            return TranscriptSegment(source: source, start: Double(start), end: Double(start + 1), text: text)
         }
     }
 
