@@ -41,6 +41,15 @@ near each boundary and handed to Voz, which runs on the Neural Engine at about
 100× realtime. The transcript file is rewritten after every chunk, so it's
 readable during the meeting and done within seconds of the end.
 
+**Tagging.** When the recording ends, [Gist](https://desertant.com/models/gist/)
+tags the transcript with up to three topics from its fixed set of 36, such as
+Technology & Software or Personal Finance & Investing. Gist is built for
+post-length text, so the transcript is scored in passages of about 80 words and
+the scores are rolled up: a topic has to hold a real share of the conversation
+to count. Transcripts under 50 words aren't tagged. The model (74 MB) downloads
+the first time you record and loads while the meeting runs. The transcript is
+saved before tagging starts, so a slow download can't hold it up.
+
 **Output.** One Markdown file per meeting, e.g.
 `2026-09-11 0930 Google Meet - Weekly sync.md`:
 
@@ -51,9 +60,12 @@ date: 2026-09-11T09:30:00+10:00
 platform: "Google Meet"
 duration: 2530
 status: complete
+tags: [technology, business]
 ---
 
 # Weekly sync
+...
+- **Topics:** Technology & Software, Business & Entrepreneurship
 ...
 **[00:00:03] Others:** Morning, everyone. Shall we start with the release?
 
@@ -84,7 +96,7 @@ The code is in two layers:
   chunking, speaker turns, echo removal, meeting classification and Markdown.
   It builds on Linux, which is what CI runs on the org's self-hosted runners.
 - `Packages/TranscribeKit/Sources/TranscribeKit` has everything that needs a Mac:
-  Core Audio capture, meeting detection, Voz.
+  Core Audio capture, meeting detection, Voz and Gist.
 - `Transcribe/` is the SwiftUI menu bar app.
 
 `transcribe-cli` exercises the pipeline without the app:
@@ -92,6 +104,7 @@ The code is in two layers:
 ```sh
 swift run --package-path Packages/TranscribeKit -c release transcribe-cli file recording.m4a
 swift run --package-path Packages/TranscribeKit -c release transcribe-cli detect
+swift run --package-path Packages/TranscribeKit -c release transcribe-cli topics transcript.md
 ```
 
 Releases are covered in [RELEASING.md](RELEASING.md) and CI in
@@ -99,8 +112,9 @@ Releases are covered in [RELEASING.md](RELEASING.md) and CI in
 
 ## Credits
 
-Speech recognition by [Voz](https://desertant.com/models/voz/) from Desert Ant
-Labs, under the [Desert Ant Labs Source-Available License](https://license.desertant.com/1.0).
-It's free below 100,000 monthly active devices. The model is built on NVIDIA
+Speech recognition by [Voz](https://desertant.com/models/voz/) and topic tagging
+by [Gist](https://desertant.com/models/gist/), both from Desert Ant Labs, under
+the [Desert Ant Labs Source-Available License](https://license.desertant.com/1.0).
+Each is free below 100,000 monthly active devices. Voz is built on NVIDIA
 Parakeet TDT 0.6B v3 (CC BY 4.0). The SDK reports model loads, with an anonymous
 device ID and no audio or text, to count active devices.

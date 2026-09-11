@@ -14,14 +14,20 @@ public actor TranscriptFile {
 
     public var wordCount: Int { words.count }
 
+    public var segments: [TranscriptSegment] { TranscriptBuilder.segments(from: words) }
+
     public func append(_ newWords: [TranscribedWord]) {
         words.append(contentsOf: newWords)
+    }
+
+    public func setTopics(_ topics: [TranscriptTopic]) {
+        metadata.topics = topics
     }
 
     public func write(duration: TimeInterval, inProgress: Bool) throws {
         let markdown = TranscriptRenderer.markdown(
             metadata: metadata,
-            segments: TranscriptBuilder.segments(from: words),
+            segments: segments,
             duration: duration,
             inProgress: inProgress)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
