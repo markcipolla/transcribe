@@ -11,14 +11,19 @@ public struct TranscriptMetadata: Sendable, Equatable {
     public var microphoneLabel: String
     /// Label for everyone heard through the meeting audio.
     public var systemLabel: String
+    /// What the meeting was about, most prominent first. Worked out once the
+    /// recording ends, so empty until then.
+    public var topics: [TranscriptTopic]
 
     public init(title: String?, platform: MeetingPlatform, startedAt: Date,
-                microphoneLabel: String = "Me", systemLabel: String = "Others") {
+                microphoneLabel: String = "Me", systemLabel: String = "Others",
+                topics: [TranscriptTopic] = []) {
         self.title = title
         self.platform = platform
         self.startedAt = startedAt
         self.microphoneLabel = microphoneLabel
         self.systemLabel = systemLabel
+        self.topics = topics
     }
 
     /// The heading: the meeting's name, else the platform it was on.
@@ -49,6 +54,7 @@ public enum TranscriptRenderer {
         inProgress: Bool
     ) -> String {
         let description = metadata.description.flatMap { $0.isEmpty ? nil : $0 }
+        let topics = metadata.topics
         var lines: [String] = ["---", "title: \(yamlString(metadata.displayTitle))"]
         if let description { lines.append("description: \(yamlString(description))") }
         lines += [
@@ -56,6 +62,13 @@ public enum TranscriptRenderer {
             "platform: \(yamlString(metadata.platform.rawValue))",
             "duration: \(Int(duration.rounded()))",
             "status: \(inProgress ? "recording" : "complete")",
+        ]
+        if !topics.isEmpty {
+            // Slugs are lowercase letters and hyphens, which are valid tags
+            // as they are.
+            lines.append("tags: [\(topics.map(\.slug).joined(separator: ", "))]")
+        }
+        lines += [
             "---",
             "",
             "# \(metadata.displayTitle)",
@@ -67,6 +80,11 @@ public enum TranscriptRenderer {
             "- **Platform:** \(metadata.platform.rawValue)",
             "- **Duration:** \(humanDuration(duration))",
             "- **Speakers:** \(metadata.microphoneLabel) (microphone), \(metadata.systemLabel) (meeting audio)",
+        ]
+        if !topics.isEmpty {
+            lines.append("- **Topics:** \(topics.map(\.name).joined(separator: ", "))")
+        }
+        lines += [
             "",
             "---",
             "",

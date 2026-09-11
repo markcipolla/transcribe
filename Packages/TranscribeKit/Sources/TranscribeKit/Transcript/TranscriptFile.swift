@@ -20,8 +20,12 @@ public actor TranscriptFile {
         words.append(contentsOf: newWords)
     }
 
-    public func update(_ newMetadata: TranscriptMetadata) {
-        metadata = newMetadata
+    public func apply(_ summary: MeetingSummary) {
+        metadata.apply(summary)
+    }
+
+    public func setTopics(_ topics: [TranscriptTopic]) {
+        metadata.topics = topics
     }
 
     /// Rename the file, for a meeting that got its title after it started.

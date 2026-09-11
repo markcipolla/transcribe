@@ -2,9 +2,10 @@
 
 A menu bar app for macOS that notices when you join a Google Meet, Microsoft
 Teams or Slack huddle call, transcribes it on your Mac with
-[Voz](https://desertant.com/models/voz/), titles it with
-[Title](https://desertant.com/models/title/), and saves the transcript as
-Markdown in a folder you choose. Audio never leaves the Mac.
+[Voz](https://desertant.com/models/voz/), titles and tags it with
+[Title](https://desertant.com/models/title/) and
+[Gist](https://desertant.com/models/gist/), and saves the transcript as Markdown
+in a folder you choose. Audio never leaves the Mac.
 
 ```sh
 brew install --cask markcipolla/tap/transcribe
@@ -46,10 +47,20 @@ readable during the meeting and done within seconds of the end.
 GPU, reads the transcript and writes a sentence or two about the meeting. For a
 call with no name of its own, such as a Teams call, a Slack huddle or a
 recording you started yourself, it writes the title as well, and the file is
-renamed to match. A Meet call keeps the name it had. The model was trained on short clips and
-loses the thread past about 8,000 words, so a long meeting is cut to four
-evenly spaced stretches of 750 words. It takes a second or two, and the model
-(286 MB) downloads during your first recording. Turn it off in Settings.
+renamed to match. A Meet call keeps the name it had. The model was trained on
+short clips and loses the thread past about 8,000 words, so a long meeting is
+cut to four evenly spaced stretches of 750 words. It takes a second or two, and
+the model (286 MB) downloads during your first recording. Turn it off in
+Settings.
+
+**Tagging.** When the recording ends, [Gist](https://desertant.com/models/gist/)
+tags the transcript with up to three topics from its fixed set of 36, such as
+Technology & Software or Personal Finance & Investing. Gist is built for
+post-length text, so the transcript is scored in passages of about 80 words and
+the scores are rolled up: a topic has to hold a real share of the conversation
+to count. Transcripts under 50 words aren't tagged. The model (74 MB) downloads
+the first time you record and loads while the meeting runs. The transcript is
+saved before tagging starts, so a slow download can't hold it up.
 
 **Output.** One Markdown file per meeting, e.g.
 `2026-09-11 0930 Google Meet - Weekly sync.md`:
@@ -62,11 +73,14 @@ date: 2026-09-11T09:30:00+10:00
 platform: "Google Meet"
 duration: 2530
 status: complete
+tags: [technology, business]
 ---
 
 # Weekly sync
 
 The team reviews the four open release bugs and agrees to ship on Thursday.
+...
+- **Topics:** Technology & Software, Business & Entrepreneurship
 ...
 **[00:00:03] Others:** Morning, everyone. Shall we start with the release?
 
@@ -101,7 +115,7 @@ The code is in two layers:
   chunking, speaker turns, echo removal, meeting classification and Markdown.
   It builds on Linux, which is what CI runs on the org's self-hosted runners.
 - `Packages/TranscribeKit/Sources/TranscribeKit` has everything that needs a Mac:
-  Core Audio capture, meeting detection, Voz and Title.
+  Core Audio capture, meeting detection, Voz, Gist and Title.
 - `Transcribe/` is the SwiftUI menu bar app.
 
 `transcribe-cli` exercises the pipeline without the app:
@@ -109,6 +123,7 @@ The code is in two layers:
 ```sh
 swift run --package-path Packages/TranscribeKit -c release transcribe-cli file recording.m4a
 swift run --package-path Packages/TranscribeKit -c release transcribe-cli detect
+swift run --package-path Packages/TranscribeKit -c release transcribe-cli topics transcript.md
 ```
 
 SwiftPM can't compile MLX's shaders, so for titles build the CLI with Xcode:
@@ -124,12 +139,11 @@ Releases are covered in [RELEASING.md](RELEASING.md) and CI in
 
 ## Credits
 
-Speech recognition by [Voz](https://desertant.com/models/voz/) from Desert Ant
-Labs, under the [Desert Ant Labs Source-Available License](https://license.desertant.com/1.0).
-It's free below 100,000 monthly active devices. The model is built on NVIDIA
-Parakeet TDT 0.6B v3 (CC BY 4.0). The SDK reports model loads, with an anonymous
-device ID and no audio or text, to count active devices.
-
-Titles by [Title](https://desertant.com/models/title/), also from Desert Ant
-Labs under the same license. The model is built on IBM Granite 4.0 350M
-(Apache 2.0).
+Speech recognition by [Voz](https://desertant.com/models/voz/), topic tagging
+by [Gist](https://desertant.com/models/gist/) and titles by
+[Title](https://desertant.com/models/title/), all from Desert Ant Labs, under
+the [Desert Ant Labs Source-Available License](https://license.desertant.com/1.0).
+Each is free below 100,000 monthly active devices. Voz is built on NVIDIA
+Parakeet TDT 0.6B v3 (CC BY 4.0) and Title on IBM Granite 4.0 350M (Apache 2.0).
+The SDK reports model loads, with an anonymous device ID and no audio or text,
+to count active devices.

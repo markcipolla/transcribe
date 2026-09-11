@@ -15,6 +15,7 @@ import TranscribeKit
 final class AppModel {
     let settings: Settings
     let engine = TranscriptionEngine()
+    let tagger = TopicTagger()
     let titleWriter = TitleWriter()
     let updater: Updater
 
@@ -122,6 +123,7 @@ final class AppModel {
             systemLabel: settings.othersLabel.isEmpty ? "Others" : settings.othersLabel)
         let session = RecordingSession(metadata: metadata, directory: directory,
                                        captureMicrophone: settings.captureMicrophone, engine: engine,
+                                       tagger: tagger,
                                        titleWriter: settings.writeTitles ? titleWriter : nil)
         do {
             try await session.start()

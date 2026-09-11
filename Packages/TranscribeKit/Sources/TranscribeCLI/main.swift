@@ -12,6 +12,8 @@ import TranscribeKit
 //       Prints the apps using the microphone and the meeting detected, if any.
 //   transcribe-cli record <seconds> [directory]
 //       Records system audio and the microphone, like the app does.
+//   transcribe-cli topics <transcript.md>
+//       Tags a saved transcript with its topics, as a recording is when it ends.
 //   transcribe-cli title <transcript.md | text file>
 //       Writes a title and description the way the app does when a meeting
 //       ends.
@@ -72,9 +74,10 @@ func transcribeFile(_ path: String, source: AudioSource, title: Bool) async thro
     let elapsed = Date().timeIntervalSince(transcribeStart)
     print("Transcribed in \(String(format: "%.2f", elapsed)) s (\(String(format: "%.0f", Double(samples.count) / rate / elapsed))x realtime)\n")
 
-    var metadata = TranscriptMetadata(title: title ? nil : url.deletingPathExtension().lastPathComponent,
-                                      platform: .manual, startedAt: Date())
     let segments = TranscriptBuilder.segments(from: words)
+    var metadata = TranscriptMetadata(title: title ? nil : url.deletingPathExtension().lastPathComponent,
+                                      platform: .manual, startedAt: Date(),
+                                      topics: try await TopicTagger().topics(for: segments))
     if title {
         let writer = try await downloadedTitleWriter()
         let started = Date()
@@ -89,16 +92,34 @@ func transcribeFile(_ path: String, source: AudioSource, title: Bool) async thro
                                       inProgress: false))
 }
 
-/// Title a transcript this app wrote, or any text file.
-@MainActor
-func title(_ path: String) async throws {
-    let text = try String(contentsOfFile: path, encoding: .utf8)
-    // Transcript lines look like `**[00:01:02] Mark:** words`.
-    let turns = text.split(separator: "\n").compactMap { line -> TranscriptSegment? in
+/// Tag a transcript the app saved, reading its speaker turns back out of the Markdown.
+func tagTranscript(_ path: String) async throws {
+    let segments = try transcriptSegments(path)
+    let passages = TopicPassages.passages(from: segments)
+    print("\(segments.count) turns, \(passages.count) passages")
+    let start = Date()
+    let topics = try await TopicTagger().topics(for: segments)
+    print("Tagged in \(String(format: "%.2f", Date().timeIntervalSince(start))) s")
+    for topic in topics { print("  \(topic.slug)  (\(topic.name))") }
+}
+
+/// The speaker turns in a transcript the app saved, whose lines look like
+/// `**[00:01:02] Mark:** words`. Empty for any other file.
+func transcriptSegments(_ path: String) throws -> [TranscriptSegment] {
+    let markdown = try String(contentsOfFile: path, encoding: .utf8)
+    return markdown.split(separator: "\n").compactMap { line -> TranscriptSegment? in
         guard line.hasPrefix("**["), let end = line.range(of: ":** ") else { return nil }
         return TranscriptSegment(source: .system, start: 0, end: 0, text: String(line[end.upperBound...]))
     }
-    let passage = turns.isEmpty ? text : TitlePassage.text(from: turns)
+}
+
+/// Title a transcript this app wrote, or any text file.
+@MainActor
+func title(_ path: String) async throws {
+    let turns = try transcriptSegments(path)
+    let passage = turns.isEmpty
+        ? try String(contentsOfFile: path, encoding: .utf8)
+        : TitlePassage.text(from: turns)
     let writer = try await downloadedTitleWriter()
     let started = Date()
     guard let summary = await writer.describe(passage: passage) else {
@@ -140,7 +161,7 @@ func record(seconds: Double, directory: URL) async throws {
     let engine = TranscriptionEngine()
     let session = RecordingSession(
         metadata: TranscriptMetadata(title: "CLI test", platform: .manual, startedAt: Date()),
-        directory: directory, captureMicrophone: true, engine: engine)
+        directory: directory, captureMicrophone: true, engine: engine, tagger: TopicTagger())
     try await session.start()
     print("Recording for \(Int(seconds)) s to \(session.fileURL.path)")
     try await Task.sleep(for: .seconds(seconds))
@@ -169,8 +190,10 @@ do {
             ? URL(fileURLWithPath: arguments[2])
             : FileManager.default.temporaryDirectory
         try await record(seconds: Double(arguments[1]) ?? 10, directory: directory)
+    case "topics" where arguments.count >= 2:
+        try await tagTranscript(arguments[1])
     default:
-        print("usage: transcribe-cli file <audio> [--as microphone] [--title] | detect | record <seconds> [directory] | title <file>")
+        print("usage: transcribe-cli file <audio> [--as microphone] [--title] | detect | record <seconds> [directory] | topics <transcript.md> | title <file>")
         exit(2)
     }
 } catch {
