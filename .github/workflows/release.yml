@@ -1,0 +1,147 @@
+name: Release
+
+# Push a `v*` tag to ship a version:
+#
+#   build    (GitHub-hosted macOS)  archive, sign with Developer ID, notarize,
+#                                   zip, sign for Sparkle, write the appcast.
+#                                   Needs a Mac, and no self-hosted runner is one.
+#   publish  (self-hosted Linux)    create the GitHub release (which moves the
+#                                   Sparkle feed, .../releases/latest/download/
+#                                   appcast.xml) and update the Homebrew cask.
+#
+# Tag pushes need write access, so fork code cannot reach the self-hosted job.
+# Secrets are listed in RELEASING.md.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build number is the commit count, so it needs the whole history.
+          fetch-depth: 0
+
+      - name: Check signing secrets are configured
+        env:
+          HAS_CERT: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
+          HAS_NOTARY: ${{ secrets.NOTARY_API_KEY_P8 != '' }}
+          HAS_SPARKLE: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
+        run: |
+          missing=""
+          [ "$HAS_CERT" = "true" ] || missing="$missing DEVELOPER_ID_CERTIFICATE_P12"
+          [ "$HAS_NOTARY" = "true" ] || missing="$missing NOTARY_API_KEY_P8"
+          [ "$HAS_SPARKLE" = "true" ] || missing="$missing SPARKLE_PRIVATE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing. Releases must be signed, notarized and Sparkle-signed, or Gatekeeper, Homebrew and the updater will refuse them. See RELEASING.md."
+            exit 1
+          fi
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Import the Developer ID certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # Split on purpose: one argument per existing keychain.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+
+      - name: Write the notary and Sparkle keys
+        env:
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$NOTARY_API_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle.key"
+
+      - name: Build, sign and notarize
+        env:
+          NOTARY_KEY_PATH: ${{ runner.temp }}/notary.p8
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          SPARKLE_KEY_PATH: ${{ runner.temp }}/sparkle.key
+        run: scripts/build-release.sh "$GITHUB_REF_NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/sparkle.key"
+
+  publish:
+    needs: build
+    runs-on: self-hosted
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Transcribe-*.zip
+            dist/appcast.xml
+          generate_release_notes: true
+
+      - name: Check the tap token is configured
+        env:
+          HAS_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::HOMEBREW_TAP_GITHUB_TOKEN is not set, so the cask was not updated. See RELEASING.md."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          repository: markcipolla/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update the Homebrew cask
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA256="$(sha256sum "dist/Transcribe-$VERSION.zip" | cut -d' ' -f1)"
+          scripts/update-cask.sh "$VERSION" "$SHA256" homebrew-tap
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/transcribe.rb
+          git commit -m "transcribe $VERSION"
+          git push

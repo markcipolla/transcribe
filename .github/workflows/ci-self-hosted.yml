@@ -1,0 +1,45 @@
+name: CI (self-hosted)
+
+# The platform-independent tests on the org's self-hosted runners, for fast
+# feedback on every branch pushed to this repository.
+#
+# The security boundary is the trigger. Forks cannot raise a `push` event on
+# this repository (a fork's pushes run in the fork's own Actions context, which
+# cannot see our runners), and `workflow_dispatch` needs write access. So fork
+# code never reaches this workflow, whatever a pull request does to the file.
+#
+# Only TranscribeCore runs here, because the self-hosted runners are Linux. The
+# macOS build is in ci.yml on GitHub-hosted runners.
+#
+# Reaching the runners needs this repository added to the `public-ci` runner
+# group. See docs/self-hosted-ci.md.
+#
+# Job IDs deliberately differ from ci.yml's so the two workflows never report
+# to the same status-check context.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests-self-hosted:
+    name: core-tests (self-hosted)
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.1"
+
+      - name: Test TranscribeCore on Linux
+        run: swift test --package-path Packages/TranscribeKit

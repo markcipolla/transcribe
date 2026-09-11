@@ -1,0 +1,66 @@
+name: CI
+
+# The fork-facing half of CI. transcribe is public, and a `pull_request` run
+# executes the workflow file from the pull request's head, so a fork could
+# rewrite anything here, `runs-on` included. That makes GitHub-hosted runners
+# the only safe choice for this file. The org's self-hosted runners are used
+# by ci-self-hosted.yml, behind a trigger forks cannot raise. See
+# docs/self-hosted-ci.md.
+#
+# The macOS build has to be GitHub-hosted in any case: every self-hosted runner
+# in the org is Linux, and the app needs Xcode, Core Audio and Core ML.
+#
+# Job IDs are the status-check contexts a ruleset would require. Renaming one
+# silently stops it gating merges.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test TranscribeCore on Linux
+        run: swift test --package-path Packages/TranscribeKit
+
+  build-macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: xcodebuild -version && swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build/xcode/SourcePackages
+            Packages/TranscribeKit/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml', 'Packages/TranscribeKit/Package.swift') }}
+
+      - name: Test TranscribeKit
+        run: swift test --package-path Packages/TranscribeKit
+
+      - name: Build the app
+        run: |
+          xcodegen generate --quiet
+          xcodebuild build \
+            -project Transcribe.xcodeproj -scheme Transcribe -configuration Release \
+            -derivedDataPath .build/xcode -skipPackagePluginValidation \
+            ARCHS=arm64 CODE_SIGNING_ALLOWED=NO -quiet
