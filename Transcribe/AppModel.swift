@@ -15,6 +15,7 @@ import TranscribeKit
 final class AppModel {
     let settings: Settings
     let engine = TranscriptionEngine()
+    let tagger = TopicTagger()
     let updater: Updater
 
     /// The call currently happening, whether or not it is being recorded.
@@ -120,7 +121,8 @@ final class AppModel {
             microphoneLabel: settings.speakerName.isEmpty ? "Me" : settings.speakerName,
             systemLabel: settings.othersLabel.isEmpty ? "Others" : settings.othersLabel)
         let session = RecordingSession(metadata: metadata, directory: directory,
-                                       captureMicrophone: settings.captureMicrophone, engine: engine)
+                                       captureMicrophone: settings.captureMicrophone, engine: engine,
+                                       tagger: tagger)
         do {
             try await session.start()
         } catch {

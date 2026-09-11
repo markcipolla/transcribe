@@ -32,6 +32,7 @@ public final class RecordingSession {
     public var duration: TimeInterval { (endedAt ?? Date()).timeIntervalSince(startedAt) }
 
     @ObservationIgnored private let engine: TranscriptionEngine
+    @ObservationIgnored private let tagger: TopicTagger
     @ObservationIgnored private let file: TranscriptFile
     @ObservationIgnored private let router: ChunkRouter
     @ObservationIgnored private var microphone: MicrophoneCapture?
@@ -47,10 +48,12 @@ public final class RecordingSession {
         metadata: TranscriptMetadata,
         directory: URL,
         captureMicrophone: Bool,
-        engine: TranscriptionEngine
+        engine: TranscriptionEngine,
+        tagger: TopicTagger
     ) {
         self.metadata = metadata
         self.engine = engine
+        self.tagger = tagger
         self.capturesMicrophone = captureMicrophone
         fileURL = TranscriptFileNamer.uniqueURL(in: directory, for: metadata)
         file = TranscriptFile(url: fileURL, metadata: metadata)
@@ -100,6 +103,14 @@ public final class RecordingSession {
 
         try? await file.write(duration: 0, inProgress: true)
         consumer = Task { await self.transcribeChunks() }
+        // Loaded now so it is ready when the meeting ends.
+        Task { [log, tagger] in
+            do {
+                try await tagger.prepare()
+            } catch {
+                log.error("Topic model failed to load: \(String(describing: error), privacy: .public)")
+            }
+        }
         log.info("Recording \(self.metadata.displayTitle, privacy: .public) to \(self.fileURL.path, privacy: .public)")
     }
 
@@ -122,7 +133,12 @@ public final class RecordingSession {
             log.info("No speech; discarded \(self.fileURL.lastPathComponent, privacy: .public)")
         } else {
             do {
+                // Saved before tagging, so a topic model that is still
+                // downloading cannot hold up the transcript.
                 try await file.write(duration: duration, inProgress: false)
+                if await tagTopics() {
+                    try await file.write(duration: duration, inProgress: false)
+                }
             } catch {
                 warnings.append("The transcript could not be saved: \(error.localizedDescription)")
             }
@@ -135,6 +151,21 @@ public final class RecordingSession {
     /// actually arriving (a missing permission shows up as silence).
     public func lastHeard(_ source: AudioSource) -> Date? {
         router.lastHeard(source)
+    }
+
+    /// Add the meeting's topics to the transcript. Returns whether any were
+    /// found. Topics are a nicety, so failing to find them is only logged.
+    private func tagTopics() async -> Bool {
+        do {
+            let topics = try await tagger.topics(for: await file.segments)
+            log.info("Topics: \(topics.map(\.slug).joined(separator: ", "), privacy: .public)")
+            guard !topics.isEmpty else { return false }
+            await file.setTopics(topics)
+            return true
+        } catch {
+            log.error("Topic tagging failed: \(String(describing: error), privacy: .public)")
+            return false
+        }
     }
 
     private func transcribeChunks() async {

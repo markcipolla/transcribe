@@ -11,6 +11,8 @@ import TranscribeKit
 //       Prints the apps using the microphone and the meeting detected, if any.
 //   transcribe-cli record <seconds> [directory]
 //       Records system audio and the microphone, like the app does.
+//   transcribe-cli topics <transcript.md>
+//       Tags a saved transcript with its topics, as a recording is when it ends.
 
 @MainActor
 func transcribeFile(_ path: String, source: AudioSource) async throws {
@@ -65,12 +67,29 @@ func transcribeFile(_ path: String, source: AudioSource) async throws {
     let elapsed = Date().timeIntervalSince(transcribeStart)
     print("Transcribed in \(String(format: "%.2f", elapsed)) s (\(String(format: "%.0f", Double(samples.count) / rate / elapsed))x realtime)\n")
 
+    let segments = TranscriptBuilder.segments(from: words)
     let metadata = TranscriptMetadata(title: url.deletingPathExtension().lastPathComponent,
-                                      platform: .manual, startedAt: Date())
+                                      platform: .manual, startedAt: Date(),
+                                      topics: try await TopicTagger().topics(for: segments))
     print(TranscriptRenderer.markdown(metadata: metadata,
-                                      segments: TranscriptBuilder.segments(from: words),
+                                      segments: segments,
                                       duration: Double(samples.count) / rate,
                                       inProgress: false))
+}
+
+/// Tag a transcript the app saved, reading its speaker turns back out of the Markdown.
+func tagTranscript(_ path: String) async throws {
+    let markdown = try String(contentsOfFile: path, encoding: .utf8)
+    let segments = markdown.split(separator: "\n").compactMap { line -> TranscriptSegment? in
+        guard line.hasPrefix("**["), let end = line.range(of: ":** ") else { return nil }
+        return TranscriptSegment(source: .system, start: 0, end: 0, text: String(line[end.upperBound...]))
+    }
+    let passages = TopicPassages.passages(from: segments)
+    print("\(segments.count) turns, \(passages.count) passages")
+    let start = Date()
+    let topics = try await TopicTagger().topics(for: segments)
+    print("Tagged in \(String(format: "%.2f", Date().timeIntervalSince(start))) s")
+    for topic in topics { print("  \(topic.slug)  (\(topic.name))") }
 }
 
 func detect() async {
@@ -90,7 +109,7 @@ func record(seconds: Double, directory: URL) async throws {
     let engine = TranscriptionEngine()
     let session = RecordingSession(
         metadata: TranscriptMetadata(title: "CLI test", platform: .manual, startedAt: Date()),
-        directory: directory, captureMicrophone: true, engine: engine)
+        directory: directory, captureMicrophone: true, engine: engine, tagger: TopicTagger())
     try await session.start()
     print("Recording for \(Int(seconds)) s to \(session.fileURL.path)")
     try await Task.sleep(for: .seconds(seconds))
@@ -117,8 +136,10 @@ do {
             ? URL(fileURLWithPath: arguments[2])
             : FileManager.default.temporaryDirectory
         try await record(seconds: Double(arguments[1]) ?? 10, directory: directory)
+    case "topics" where arguments.count >= 2:
+        try await tagTranscript(arguments[1])
     default:
-        print("usage: transcribe-cli file <audio> [--as microphone] | detect | record <seconds> [directory]")
+        print("usage: transcribe-cli file <audio> [--as microphone] | detect | record <seconds> [directory] | topics <transcript.md>")
         exit(2)
     }
 } catch {

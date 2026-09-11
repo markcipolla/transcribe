@@ -7,7 +7,7 @@ import PackageDescription
 //                   classification, Markdown. Builds and tests on Linux, which
 //                   is what lets CI run it on the org's self-hosted runners.
 //   TranscribeKit   Everything that needs a Mac: Core Audio capture, meeting
-//                   detection, and Voz (Core ML). Re-exports TranscribeCore.
+//                   detection, Voz and Gist (Core ML). Re-exports TranscribeCore.
 //
 // The manifest is evaluated on the host, so on Linux the Apple-only targets
 // and the Voz dependency are simply absent and `swift test` runs the core.
@@ -35,6 +35,7 @@ targets += [
         dependencies: [
             "TranscribeCore",
             .product(name: "Voz", package: "desert-ant-core"),
+            .product(name: "Gist", package: "desert-ant-core"),
         ]
     ),
     .executableTarget(name: "TranscribeCLI", dependencies: ["TranscribeKit"]),

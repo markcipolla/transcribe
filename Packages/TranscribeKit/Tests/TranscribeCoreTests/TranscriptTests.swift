@@ -86,6 +86,21 @@ struct TranscriptRendererTests {
         #expect(markdown.contains(#"title: "Say \"hi\"""#))
     }
 
+    @Test func writesTopicsAsTags() {
+        var tagged = metadata
+        tagged.topics = [TranscriptTopic(slug: "technology", name: "Technology & Software"),
+                         TranscriptTopic(slug: "creator-economy", name: "Creator Economy & Marketing")]
+        let markdown = TranscriptRenderer.markdown(metadata: tagged, segments: [], duration: 0, inProgress: false)
+        #expect(markdown.contains("status: complete\ntags: [technology, creator-economy]\n---"))
+        #expect(markdown.contains("- **Topics:** Technology & Software, Creator Economy & Marketing"))
+    }
+
+    @Test func leavesOutTopicsUntilThereAreSome() {
+        let markdown = TranscriptRenderer.markdown(metadata: metadata, segments: [], duration: 0, inProgress: true)
+        #expect(!markdown.contains("tags:"))
+        #expect(!markdown.contains("Topics"))
+    }
+
     @Test func namesFilesByDateAndMeeting() {
         let name = TranscriptFileNamer.fileName(for: metadata)
         #expect(name.hasSuffix(" Google Meet - Weekly sync.md"))
@@ -105,5 +120,31 @@ struct TranscriptRendererTests {
         let second = TranscriptFileNamer.uniqueURL(in: directory, for: metadata)
         #expect(first != second)
         #expect(second.lastPathComponent.hasSuffix("Weekly sync 2.md"))
+    }
+}
+
+struct TopicPassagesTests {
+    func segments(words count: Int, per turns: Int) -> [TranscriptSegment] {
+        let words = (0..<count).map { "w\($0)" }
+        return stride(from: 0, to: count, by: turns).map { start in
+            TranscriptSegment(source: start / turns % 2 == 0 ? .system : .microphone,
+                              start: Double(start), end: Double(start + 1),
+                              text: words[start..<min(start + turns, count)].joined(separator: " "))
+        }
+    }
+
+    @Test func splitsEvenlyAcrossSpeakerTurns() {
+        let passages = TopicPassages.passages(from: segments(words: 250, per: 7), targetWords: 80)
+        #expect(passages.map { $0.split(separator: " ").count } == [83, 83, 84])
+        #expect(passages.joined(separator: " ") == (0..<250).map { "w\($0)" }.joined(separator: " "))
+    }
+
+    @Test func keepsAShortTranscriptAsOnePassage() {
+        #expect(TopicPassages.passages(from: segments(words: 110, per: 20), targetWords: 80).count == 1)
+    }
+
+    @Test func skipsTranscriptsTooShortToTag() {
+        #expect(TopicPassages.passages(from: segments(words: TopicPassages.minimumWords - 1, per: 10)).isEmpty)
+        #expect(TopicPassages.passages(from: []).isEmpty)
     }
 }
