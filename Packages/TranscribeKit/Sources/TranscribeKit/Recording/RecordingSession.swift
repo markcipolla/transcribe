@@ -34,7 +34,7 @@ public final class RecordingSession {
     public var duration: TimeInterval { (endedAt ?? Date()).timeIntervalSince(startedAt) }
 
     @ObservationIgnored private let engine: TranscriptionEngine
-    @ObservationIgnored private let tagger: TopicTagger
+    @ObservationIgnored private let tagger: TopicTagger?
     @ObservationIgnored private let titleWriter: TitleWriter?
     @ObservationIgnored private let file: TranscriptFile
     @ObservationIgnored private let router: ChunkRouter
@@ -47,14 +47,17 @@ public final class RecordingSession {
     /// the file on disk trails the meeting by under a minute.
     public static let chunkDuration: TimeInterval = 30
 
-    /// - Parameter titleWriter: names and describes the meeting once it ends.
-    ///   Nil leaves the transcript as it was started.
+    /// - Parameters:
+    ///   - tagger: tags the transcript with its topics once the meeting ends.
+    ///     Nil leaves it untagged.
+    ///   - titleWriter: names and describes the meeting once it ends.
+    ///     Nil leaves the transcript as it was started.
     public init(
         metadata: TranscriptMetadata,
         directory: URL,
         captureMicrophone: Bool,
         engine: TranscriptionEngine,
-        tagger: TopicTagger,
+        tagger: TopicTagger? = nil,
         titleWriter: TitleWriter? = nil
     ) {
         self.metadata = metadata
@@ -111,14 +114,6 @@ public final class RecordingSession {
 
         try? await file.write(duration: 0, inProgress: true)
         consumer = Task { await self.transcribeChunks() }
-        // Loaded now so it is ready when the meeting ends.
-        Task { [log, tagger] in
-            do {
-                try await tagger.prepare()
-            } catch {
-                log.error("Topic model failed to load: \(String(describing: error), privacy: .public)")
-            }
-        }
         log.info("Recording \(self.metadata.displayTitle, privacy: .public) to \(self.fileURL.path, privacy: .public)")
     }
 
@@ -184,6 +179,7 @@ public final class RecordingSession {
     /// Add the meeting's topics to the transcript. Returns whether any were
     /// found. Topics are a nicety, so failing to find them is only logged.
     private func tagTopics() async -> Bool {
+        guard let tagger else { return false }
         do {
             let topics = try await tagger.topics(for: await file.segments)
             log.info("Topics: \(topics.map(\.slug).joined(separator: ", "), privacy: .public)")
