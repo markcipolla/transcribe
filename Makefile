@@ -37,7 +37,7 @@ test-core:
 sparkle-key: project
 	@scripts/sparkle-tool.sh generate_keys
 
-## release: build a signed, notarized release into dist/ locally (CI does this on tag push; see RELEASING.md)
+## release: build a signed release into dist/ locally (CI does this on tag push; see RELEASING.md)
 release:
 	scripts/build-release.sh $(VERSION)
 

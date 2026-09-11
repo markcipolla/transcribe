@@ -68,4 +68,4 @@ targets:
         # release. The public key comes from `make sparkle-key`; until it is
         # set, the updater stays off (see Updater.swift).
         SPARKLE_FEED_URL: https://github.com/markcipolla/transcribe/releases/latest/download/appcast.xml
-        SPARKLE_PUBLIC_KEY: ""
+        SPARKLE_PUBLIC_KEY: tPenvI8Fq+Sap9LlnT8/u56wy/JSWkXcsWxNvrhxc1o=

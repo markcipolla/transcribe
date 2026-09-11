@@ -11,7 +11,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DERIVED="${DERIVED_DATA:-.build/xcode}"
-find_bin() { find "$DERIVED/SourcePackages/artifacts" -type d -path "*Sparkle/bin" 2>/dev/null | head -1; }
+# `|| true`: before the first resolve the directory is missing, find fails, and
+# pipefail would end the script silently.
+find_bin() { find "$DERIVED/SourcePackages/artifacts" -type d -path "*Sparkle/bin" 2>/dev/null | head -1 || true; }
 
 BIN="$(find_bin)"
 if [[ -z "$BIN" ]]; then

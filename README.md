@@ -12,6 +12,10 @@ brew install --cask markcipolla/tap/transcribe
 Requires an Apple silicon Mac on macOS 14.4 or later. Updates install
 themselves via Sparkle.
 
+Releases are self-signed rather than notarized, so macOS blocks a copy
+downloaded from the releases page. The cask clears that for you. For a manual
+download, run `xattr -dr com.apple.quarantine /Applications/Transcribe.app` once.
+
 ## How it works
 
 **Detecting a call.** Every two seconds the app asks Core Audio which processes
