@@ -51,6 +51,7 @@ final class AppModel {
         self.settings = settings
         updater = Updater()
         updater.isBusy = { [weak self] in self?.isRecording ?? false }
+        updater.onCheck = { [weak self] in self?.checkForModelUpdates() }
         refreshRecentTranscripts()
     }
 
@@ -63,12 +64,22 @@ final class AppModel {
         if case .downloaded = engine.state {
             Task { try? await engine.load() }
         }
+        // Run once at launch so a user who never opens Check for Updates still
+        // sees an out-of-date model surfaced in the menu.
+        checkForModelUpdates()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.poll()
                 try? await Task.sleep(for: Self.pollInterval)
             }
         }
+    }
+
+    /// Ask each model whether a newer revision exists on the Hub. Fire and
+    /// forget; failures are silent (a failed network reads as "no update").
+    func checkForModelUpdates() {
+        Task { await engine.checkForUpdate() }
+        Task { await titleWriter.checkForUpdate() }
     }
 
     // MARK: - Detection

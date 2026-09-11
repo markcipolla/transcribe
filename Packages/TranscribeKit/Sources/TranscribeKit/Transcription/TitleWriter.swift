@@ -1,3 +1,4 @@
+import DesertAnt
 import Foundation
 import MLX
 import Observation
@@ -22,6 +23,10 @@ public final class TitleWriter {
     }
 
     public private(set) var state: State
+
+    /// A newer model revision the Hub is offering. See
+    /// ``TranscriptionEngine/newerRevision`` for the semantics.
+    public private(set) var newerRevision: String?
 
     @ObservationIgnored private var downloadTask: Task<String, Error>?
     @ObservationIgnored private let log = Logger(subsystem: "Transcribe", category: "Titles")
@@ -73,6 +78,14 @@ public final class TitleWriter {
             log.error("Title model failed to download: \(String(describing: error), privacy: .public)")
             throw error
         }
+    }
+
+    /// Ask the Hub whether a newer model revision exists within this SDK's
+    /// major-version range, and remember it on ``newerRevision`` if so.
+    public func checkForUpdate() async {
+        let latest = await TitleModel.distribution
+            .resolving(.from(TitleModel.revision)).revision
+        newerRevision = latest == TitleModel.revision ? nil : latest
     }
 
     /// A title and description for a meeting, or nil when the model is not

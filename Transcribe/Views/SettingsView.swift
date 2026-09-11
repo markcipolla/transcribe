@@ -103,30 +103,38 @@ private struct TitleModelStatus: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        switch model.titleWriter.state {
-        case .notDownloaded:
-            HStack {
-                Label("Model not downloaded (286 MB)", systemImage: "arrow.down.circle")
+        VStack(alignment: .leading, spacing: 4) {
+            switch model.titleWriter.state {
+            case .notDownloaded:
+                HStack {
+                    Label("Model not downloaded (286 MB)", systemImage: "arrow.down.circle")
+                        .font(.callout)
+                    Spacer()
+                    Button("Download") { model.downloadTitleModel() }
+                }
+            case .downloading(let progress):
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Downloading title model… \(Int(progress * 100))%").font(.callout)
+                    ProgressView(value: progress)
+                }
+            case .downloaded:
+                Label("Ready. Runs on this Mac's GPU.", systemImage: "checkmark.circle.fill")
                     .font(.callout)
-                Spacer()
-                Button("Download") { model.downloadTitleModel() }
+                    .foregroundStyle(.green)
+            case .failed(let message):
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("The title model could not download", systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                    Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                    Button("Try Again") { model.downloadTitleModel() }
+                }
             }
-        case .downloading(let progress):
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Downloading title model… \(Int(progress * 100))%").font(.callout)
-                ProgressView(value: progress)
-            }
-        case .downloaded:
-            Label("Ready. Runs on this Mac's GPU.", systemImage: "checkmark.circle.fill")
-                .font(.callout)
-                .foregroundStyle(.green)
-        case .failed(let message):
-            VStack(alignment: .leading, spacing: 4) {
-                Label("The title model could not download", systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(3)
-                Button("Try Again") { model.downloadTitleModel() }
+            if let newer = model.titleWriter.newerRevision {
+                Label("Title model \(newer) is available in a newer Transcribe.",
+                      systemImage: "sparkles")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

@@ -1,3 +1,4 @@
+import DesertAnt
 import Foundation
 import Observation
 import os
@@ -26,6 +27,12 @@ public final class TranscriptionEngine {
     public nonisolated static let sampleRate: Double = 16_000
 
     public private(set) var state: State
+
+    /// A newer model revision the Hub is offering, when one exists and shares
+    /// the SDK's major version. Set by ``checkForUpdate()``. The model itself
+    /// ships bundled with the app; the download arrives with the next app
+    /// update rather than being fetched from here.
+    public private(set) var newerRevision: String?
 
     @ObservationIgnored private var loadTask: Task<Voz, Error>?
     @ObservationIgnored private let log = Logger(subsystem: "Transcribe", category: "Engine")
@@ -87,6 +94,16 @@ public final class TranscriptionEngine {
             log.error("Voz failed to load: \(String(describing: error), privacy: .public)")
             throw error
         }
+    }
+
+    /// Ask the Hub whether a newer model revision exists within this SDK's
+    /// major-version range, and remember it on ``newerRevision`` if so. Silent
+    /// on network failure (the SDK falls the request back to the pinned
+    /// revision, so a failed check reads as "no update").
+    public func checkForUpdate() async {
+        let latest = await VozModel.distribution
+            .resolving(.from(VozModel.revision)).revision
+        newerRevision = latest == VozModel.revision ? nil : latest
     }
 
     /// Transcribe one chunk, placing its words on the recording timeline.

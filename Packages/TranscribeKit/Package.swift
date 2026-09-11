@@ -41,6 +41,10 @@ targets += [
             .product(name: "Voz", package: "desert-ant-core"),
             .product(name: "Gist", package: "desert-ant-core"),
             .product(name: "Title", package: "desert-ant-core"),
+            // For `ModelDistribution.resolving(_:)` and `RevisionRequirement`,
+            // used to ask the Hub whether a newer compatible model revision
+            // exists.
+            .product(name: "DesertAnt", package: "desert-ant-core"),
         ]
     ),
     .executableTarget(name: "TranscribeCLI", dependencies: ["TranscribeKit"]),
