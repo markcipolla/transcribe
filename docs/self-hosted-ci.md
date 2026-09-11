@@ -38,8 +38,8 @@ too. Put it in a runner group of its own, and give the jobs a label such as
 
 Runners are reached through the `public-ci` group (id 3): `visibility: selected`,
 `allows_public_repositories: true`, holding `ci-runner-1` and `ci-runner-2`.
-Until this repository is added to it, the self-hosted jobs sit `queued` and
-never fail:
+This repository is in it. A repository that isn't gets no error: its
+self-hosted jobs just sit `queued`. The command that adds one is:
 
 ```sh
 REPO_ID=$(gh api repos/markcipolla/transcribe --jq .id)
@@ -49,5 +49,14 @@ gh api -X PUT orgs/markcipolla/actions/runner-groups/3/repositories/$REPO_ID
 `Default` must not be opened to public repositories. It holds the
 socket-mounted `dokploy-runner-*` fleet.
 
-The self-hosted job installs Swift with `swift-actions/setup-swift`, which
-caches the toolchain in the runner's tool cache after the first run.
+## Swift on the runners
+
+The `ci-runner-*` services (`HomeServer/github_runner.yml`) are
+`myoung34/github-runner:ubuntu-noble` containers. Jobs run as root inside the
+container, but the image carries no Swift and keeps no tool cache between jobs.
+`swift-actions/setup-swift` doesn't work there, because it shells out to
+`file`, which the image lacks. So `ci-self-hosted.yml` apt-installs Swift's
+dependencies and fetches the swift.org toolchain on every run, verifying its
+signature. That is an 879 MB download per run. Baking Swift into a public-runner
+image would remove it. Keep that image free of anything private, since public
+jobs run on it.
