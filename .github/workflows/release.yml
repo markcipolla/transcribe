@@ -1,7 +1,13 @@
 name: Release
 
-# Push a `v*` tag to ship a version:
+# Every merge to main ships a patch bump. Manually pushing a `v*` tag ships
+# that version instead, and later merges keep patch-bumping from it (tag
+# v0.3.0, next merge becomes v0.3.1, and so on).
 #
+#   resolve  (self-hosted Linux)    pick the version. For a tag push it's the
+#                                   tag; for a main push it's the latest v tag
+#                                   with the patch bumped, and the resolve step
+#                                   pushes that new tag before the build runs.
 #   build    (GitHub-hosted macOS)  archive, sign, zip, sign for Sparkle, write
 #                                   the appcast. Needs a Mac, and no self-hosted
 #                                   runner is one.
@@ -9,14 +15,21 @@ name: Release
 #                                   Sparkle feed, .../releases/latest/download/
 #                                   appcast.xml) and update the Homebrew cask.
 #
+# The main-push path runs on workflow_run after CI, so a red main can't ship.
+# Tag pushes bypass that gate on purpose — a manual major/minor is deliberate.
+#
 # The build signs with whichever certificate SIGNING_CERTIFICATE_P12 holds: the
 # self-signed one today, which is not notarized. Put a Developer ID certificate
 # there and add the NOTARY_* secrets to notarize instead.
 #
-# Tag pushes need write access, so fork code cannot reach the self-hosted job.
-# Secrets are listed in RELEASING.md.
+# workflow_run and tag pushes need write access, so fork code cannot reach any
+# of these jobs. Secrets are listed in RELEASING.md.
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   push:
     tags: ['v*']
 
@@ -28,13 +41,77 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resolve:
+    # Manual tag: always. Auto path: only if CI passed on a main push.
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_branch == 'main')
+    runs-on: self-hosted
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      sha: ${{ steps.compute.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # For workflow_run, github.sha is the workflow file's sha, not the
+          # commit that fired CI — pin to the CI'd commit so the tag lands on
+          # exactly what was tested.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Compute the version
+        id: compute
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ] && [[ "$REF" == refs/tags/v* ]]; then
+              echo "Manual release: $REF_NAME"
+              echo "version=$REF_NAME" >> "$GITHUB_OUTPUT"
+              echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          # Auto-bump path: find the highest v<major>.<minor>.<patch> tag and
+          # bump patch. Pre-release tags (v1.0.0-rc1) are ignored so a manual
+          # release-candidate tag doesn't fork the numbering.
+          latest="$(git tag --list 'v*' --sort=-v:refname \
+                    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+          [ -n "$latest" ] || latest="v0.0.0"
+          latest_sha="$(git rev-list -n 1 "$latest" 2>/dev/null || true)"
+          if [ "$latest_sha" = "$HEAD_SHA" ]; then
+              echo "$HEAD_SHA is already tagged $latest, nothing to release."
+              exit 0
+          fi
+          IFS='.' read -r maj min pat <<< "${latest#v}"
+          version="v$maj.$min.$((pat + 1))"
+          echo "Auto-tagging $HEAD_SHA as $version (previous: $latest)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$version" -m "Release $version" "$HEAD_SHA"
+          git push origin "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: resolve
+    if: needs.resolve.outputs.version != ''
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
         with:
           # The build number is the commit count, so it needs the whole history.
           fetch-depth: 0
+          # Build the exact commit the version tag points at, whether that was
+          # pushed by hand or by resolve.
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Check signing secrets are configured
         env:
@@ -91,10 +168,11 @@ jobs:
 
       - name: Build and sign
         env:
+          VERSION: ${{ needs.resolve.outputs.version }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
           SPARKLE_KEY_PATH: ${{ runner.temp }}/sparkle.key
-        run: scripts/build-release.sh "$GITHUB_REF_NAME"
+        run: scripts/build-release.sh "$VERSION"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -109,12 +187,14 @@ jobs:
           rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/sparkle.key"
 
   publish:
-    needs: build
+    needs: [resolve, build]
     runs-on: self-hosted
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -124,6 +204,7 @@ jobs:
       - name: Create the GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.resolve.outputs.version }}
           files: |
             dist/Transcribe-*.zip
             dist/appcast.xml
@@ -145,8 +226,10 @@ jobs:
           path: homebrew-tap
 
       - name: Update the Homebrew cask
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION#v}"
           SHA256="$(sha256sum "dist/Transcribe-$VERSION.zip" | cut -d' ' -f1)"
           scripts/update-cask.sh "$VERSION" "$SHA256" homebrew-tap
           cd homebrew-tap

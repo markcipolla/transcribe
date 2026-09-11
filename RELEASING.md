@@ -1,16 +1,30 @@
 # Releasing
 
+Every merge to `main` ships a patch bump automatically once CI is green: the
+release workflow reads the highest `v<major>.<minor>.<patch>` tag, adds one to
+the patch, tags the merged commit, and runs the build. So `v0.2.0` becomes
+`v0.2.1`, `v0.2.2`, and so on with no action beyond merging.
+
+To bump major or minor, push a tag by hand:
+
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
-That's the whole release. `.github/workflows/release.yml` then:
+That releases `v0.3.0` immediately, and the next merge to `main` becomes
+`v0.3.1`, then `v0.3.2`, and so on from that new line. Manual tag pushes skip
+the CI-green gate on purpose — a hand-picked major/minor is deliberate.
 
-1. **build** (GitHub-hosted `macos-26`) runs `scripts/build-release.sh`. It
+`.github/workflows/release.yml` then:
+
+1. **resolve** (self-hosted Linux) picks the version. For a tag push it's the
+   tag; for a main push it's the latest `v` tag with the patch incremented,
+   and the job pushes that new tag before the build starts.
+2. **build** (GitHub-hosted `macos-26`) runs `scripts/build-release.sh`. It
    archives and signs with the certificate in `SIGNING_CERTIFICATE_P12`, zips,
    signs the zip with Sparkle's EdDSA key, and writes `appcast.xml`.
-2. **publish** (self-hosted Linux) creates the GitHub release with the zip and
+3. **publish** (self-hosted Linux) creates the GitHub release with the zip and
    `appcast.xml`, then writes `Casks/transcribe.rb` in
    [markcipolla/homebrew-tap](https://github.com/markcipolla/homebrew-tap).
 
