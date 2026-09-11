@@ -82,7 +82,7 @@ private struct StatusSection: View {
                     .buttonStyle(.borderedProminent)
                 } else {
                     Label(model.settings.autoRecord
-                          ? "Waiting for a Google Meet or Teams call"
+                          ? "Waiting for a Meet, Teams or Slack call"
                           : "Automatic transcription is off",
                           systemImage: "ear")
                         .font(.callout)

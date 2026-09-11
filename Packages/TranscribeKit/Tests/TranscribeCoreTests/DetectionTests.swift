@@ -3,8 +3,9 @@ import Testing
 
 struct MeetingClassifierTests {
     @Test(arguments: [
-        ("com.microsoft.teams2", AppKind.teams),
-        ("com.microsoft.teams", AppKind.teams),
+        ("com.microsoft.teams2", AppKind.meetingApp(.teams)),
+        ("com.microsoft.teams", AppKind.meetingApp(.teams)),
+        ("com.tinyspeck.slackmacgap", AppKind.meetingApp(.slack)),
         ("com.google.Chrome", AppKind.browser(.chromium)),
         ("com.google.Chrome.canary", AppKind.browser(.chromium)),
         ("company.thebrowser.Browser", AppKind.browser(.chromium)),
@@ -60,6 +61,14 @@ struct MeetingClassifierTests {
         }
         #expect(MeetingClassifier.meeting(in: [BrowserTab(url: "https://example.com/teams.microsoft.com",
                                                           title: "")]) == nil)
+    }
+
+    @Test func findsSlackOnTheWeb() {
+        let slack = BrowserTab(url: "https://app.slack.com/client/T0123/C0456", title: "general - Acme - Slack")
+        #expect(MeetingClassifier.meeting(in: [slack])?.platform == .slack)
+        #expect(MeetingClassifier.meeting(in: [BrowserTab(url: "https://slack.com/help", title: "")]) == nil)
+        let meet = BrowserTab(url: "https://meet.google.com/abc-defg-hij", title: "Meet – Standup")
+        #expect(MeetingClassifier.meeting(in: [slack, meet])?.platform == .googleMeet)
     }
 }
 

@@ -25,7 +25,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Transcribe reads your browser's list of open tabs to recognise when you are in a Google Meet or Teams call. Nothing else is read.</string>
+	<string>Transcribe reads your browser's list of open tabs to recognise when you are in a Google Meet, Teams or Slack call. Nothing else is read.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Transcribe records the meeting audio playing on this Mac so the other participants are in the transcript. Audio never leaves your Mac.</string>
 	<key>NSHumanReadableCopyright</key>

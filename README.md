@@ -1,9 +1,10 @@
 # Transcribe
 
-A menu bar app for macOS that notices when you join a Google Meet or Microsoft
-Teams call, transcribes it on your Mac with [Voz](https://desertant.com/models/voz/),
-titles it with [Title](https://desertant.com/models/title/), and saves the
-transcript as Markdown in a folder you choose. Audio never leaves the Mac.
+A menu bar app for macOS that notices when you join a Google Meet, Microsoft
+Teams or Slack huddle call, transcribes it on your Mac with
+[Voz](https://desertant.com/models/voz/), titles it with
+[Title](https://desertant.com/models/title/), and saves the transcript as
+Markdown in a folder you choose. Audio never leaves the Mac.
 
 ```sh
 brew install --cask markcipolla/tap/transcribe
@@ -21,9 +22,10 @@ download, run `xattr -dr com.apple.quarantine /Applications/Transcribe.app` once
 **Detecting a call.** Every two seconds the app asks Core Audio which processes
 have the microphone open. No permission is needed for that. A call keeps the
 microphone open for its whole length, even while you are muted. When the process
-is the Teams app, that's a Teams call. When it's a browser, the app reads the
-browser's tab list over AppleScript and looks for a `meet.google.com/xxx-xxxx-xxx`
-tab (a Meet call, whose title becomes the transcript's title) or a Teams web tab.
+is the Teams or Slack app, that's a Teams call or a Slack huddle. When it's a
+browser, the app reads the browser's tab list over AppleScript and looks for a
+`meet.google.com/xxx-xxxx-xxx` tab (a Meet call, whose title becomes the
+transcript's title), a Teams web tab or an `app.slack.com` tab.
 Recording starts after two consecutive detections and stops 20 seconds after the
 call lets go of the microphone. Recordings that catch no speech, such as a Meet
 lobby you peeked into, are discarded.
@@ -42,9 +44,9 @@ readable during the meeting and done within seconds of the end.
 
 **Titling.** When the call ends, Title, a 350M-parameter model on the Mac's
 GPU, reads the transcript and writes a sentence or two about the meeting. For a
-call with no name of its own, such as a Teams call or a recording you started
-yourself, it writes the title as well, and the file is renamed to match. A
-Meet call keeps the name it had. The model was trained on short clips and
+call with no name of its own, such as a Teams call, a Slack huddle or a
+recording you started yourself, it writes the title as well, and the file is
+renamed to match. A Meet call keeps the name it had. The model was trained on short clips and
 loses the thread past about 8,000 words, so a long meeting is cut to four
 evenly spaced stretches of 750 words. It takes a second or two, and the model
 (286 MB) downloads during your first recording. Turn it off in Settings.
@@ -77,7 +79,7 @@ The team reviews the four open release bugs and agrees to ship on Thursday.
 | --- | --- | --- |
 | Microphone | Your side of the call | First recording |
 | System Audio Recording | Everyone else | First recording |
-| Automation (per browser) | Reading tab URLs to recognise Meet and Teams | First call in that browser |
+| Automation (per browser) | Reading tab URLs to recognise Meet, Teams and Slack | First call in that browser |
 | Notifications | "Transcribing…" and "Transcript saved" | First launch |
 
 ## Development
