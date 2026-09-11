@@ -13,6 +13,7 @@ final class Settings {
         static let othersLabel = "othersLabel"
         static let notifications = "notifications"
         static let writeTitles = "writeTitles"
+        static let tagTopics = "tagTopics"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -44,6 +45,10 @@ final class Settings {
     var writeTitles: Bool {
         didSet { defaults.set(writeTitles, forKey: Key.writeTitles) }
     }
+    /// Tag each transcript with its topics when the meeting ends.
+    var tagTopics: Bool {
+        didSet { defaults.set(tagTopics, forKey: Key.tagTopics) }
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -54,6 +59,7 @@ final class Settings {
         othersLabel = defaults.string(forKey: Key.othersLabel) ?? "Others"
         notifications = defaults.object(forKey: Key.notifications) as? Bool ?? true
         writeTitles = defaults.object(forKey: Key.writeTitles) as? Bool ?? true
+        tagTopics = defaults.object(forKey: Key.tagTopics) as? Bool ?? true
     }
 
     /// Your first name, from your macOS account.

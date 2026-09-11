@@ -13,15 +13,7 @@ import Title
 @MainActor
 @Observable
 public final class TitleWriter {
-    public enum State: Equatable, Sendable {
-        /// Not on disk yet. Downloads via ``download()``.
-        case notDownloaded
-        case downloading(progress: Double)
-        case downloaded
-        case failed(String)
-    }
-
-    public private(set) var state: State
+    public private(set) var state: ModelDownloadState
 
     @ObservationIgnored private var downloadTask: Task<String, Error>?
     @ObservationIgnored private let log = Logger(subsystem: "Transcribe", category: "Titles")

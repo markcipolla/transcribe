@@ -55,7 +55,10 @@ struct SettingsView: View {
             Section {
                 Toggle("Title and describe each meeting", isOn: $settings.writeTitles)
                 if settings.writeTitles {
-                    TitleModelStatus()
+                    ModelDownloadStatus(name: "title model", size: "286 MB",
+                                        ready: "Ready. Runs on this Mac's GPU.",
+                                        state: model.titleWriter.state,
+                                        download: model.downloadTitleModel)
                 }
             } header: {
                 Text("Titles")
@@ -66,6 +69,25 @@ struct SettingsView: View {
             }
             .onChange(of: settings.writeTitles) { _, on in
                 if on { model.downloadTitleModel() }
+            }
+
+            Section {
+                Toggle("Tag each transcript with its topics", isOn: $settings.tagTopics)
+                if settings.tagTopics {
+                    ModelDownloadStatus(name: "topic model", size: "74 MB",
+                                        ready: "Ready. Runs on this Mac.",
+                                        state: model.tagger.state,
+                                        download: model.downloadTopicModel)
+                }
+            } header: {
+                Text("Topics")
+            } footer: {
+                Text("When a call ends, Gist by Desert Ant Labs tags the transcript with up to three of its 36 topics, such as Technology & Software or Personal Finance & Investing.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .onChange(of: settings.tagTopics) { _, on in
+                if on { model.downloadTopicModel() }
             }
 
             PermissionsSection()
@@ -81,7 +103,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: Self.version)
-                Text("Speech recognition by [Voz](https://desertant.com/models/voz/) from Desert Ant Labs, built on NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0). Titles by [Title](https://desertant.com/models/title/) from Desert Ant Labs, built on IBM Granite 4.0 350M (Apache 2.0).")
+                Text("Speech recognition by [Voz](https://desertant.com/models/voz/) from Desert Ant Labs, built on NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0). Topic tagging by [Gist](https://desertant.com/models/gist/) from Desert Ant Labs. Titles by [Title](https://desertant.com/models/title/) from Desert Ant Labs, built on IBM Granite 4.0 350M (Apache 2.0).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -99,34 +121,42 @@ struct SettingsView: View {
     }
 }
 
-private struct TitleModelStatus: View {
-    @Environment(AppModel.self) private var model
+/// An optional model's download state, with a way to fetch it ahead of the
+/// first recording.
+private struct ModelDownloadStatus: View {
+    /// Lowercase, as in "title model".
+    let name: String
+    let size: String
+    /// Shown once it is on disk.
+    let ready: String
+    let state: ModelDownloadState
+    let download: () -> Void
 
     var body: some View {
-        switch model.titleWriter.state {
+        switch state {
         case .notDownloaded:
             HStack {
-                Label("Model not downloaded (286 MB)", systemImage: "arrow.down.circle")
+                Label("Model not downloaded (\(size))", systemImage: "arrow.down.circle")
                     .font(.callout)
                 Spacer()
-                Button("Download") { model.downloadTitleModel() }
+                Button("Download", action: download)
             }
         case .downloading(let progress):
             VStack(alignment: .leading, spacing: 4) {
-                Text("Downloading title model… \(Int(progress * 100))%").font(.callout)
+                Text("Downloading \(name)… \(Int(progress * 100))%").font(.callout)
                 ProgressView(value: progress)
             }
         case .downloaded:
-            Label("Ready. Runs on this Mac's GPU.", systemImage: "checkmark.circle.fill")
+            Label(ready, systemImage: "checkmark.circle.fill")
                 .font(.callout)
                 .foregroundStyle(.green)
         case .failed(let message):
             VStack(alignment: .leading, spacing: 4) {
-                Label("The title model could not download", systemImage: "exclamationmark.triangle.fill")
+                Label("The \(name) could not download", systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.orange)
                 Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(3)
-                Button("Try Again") { model.downloadTitleModel() }
+                Button("Try Again", action: download)
             }
         }
     }

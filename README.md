@@ -59,8 +59,9 @@ Technology & Software or Personal Finance & Investing. Gist is built for
 post-length text, so the transcript is scored in passages of about 80 words and
 the scores are rolled up: a topic has to hold a real share of the conversation
 to count. Transcripts under 50 words aren't tagged. The model (74 MB) downloads
-the first time you record and loads while the meeting runs. The transcript is
-saved before tagging starts, so a slow download can't hold it up.
+during your first recording, or ahead of time from Settings, and loads while
+the meeting runs. The transcript is saved before tagging starts, so a slow
+download can't hold it up. Turn it off in Settings.
 
 **Output.** One Markdown file per meeting, e.g.
 `2026-09-11 0930 Google Meet - Weekly sync.md`:
