@@ -1,8 +1,8 @@
 import Foundation
 import os
 
-/// Lists a browser's open tabs over AppleScript, to tell a Meet or Teams call
-/// apart from anything else a browser might use the microphone for.
+/// Lists a browser's open tabs over AppleScript, to tell a Meet, Teams or Slack
+/// call apart from anything else a browser might use the microphone for.
 ///
 /// Runs `osascript` in a child process rather than `NSAppleScript`, which is
 /// main-thread only and would block the UI for as long as the browser takes to

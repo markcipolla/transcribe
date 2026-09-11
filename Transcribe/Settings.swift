@@ -20,7 +20,7 @@ final class Settings {
     var outputDirectory: URL? {
         didSet { defaults.set(outputDirectory?.path, forKey: Key.outputDirectory) }
     }
-    /// Start transcribing as soon as a Meet or Teams call is detected.
+    /// Start transcribing as soon as a Meet, Teams or Slack call is detected.
     var autoRecord: Bool {
         didSet { defaults.set(autoRecord, forKey: Key.autoRecord) }
     }

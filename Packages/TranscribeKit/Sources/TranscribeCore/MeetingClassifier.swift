@@ -3,6 +3,7 @@ import Foundation
 public enum MeetingPlatform: String, Sendable, Codable {
     case googleMeet = "Google Meet"
     case teams = "Microsoft Teams"
+    case slack = "Slack"
     /// A browser is on a call but its tabs cannot be read (no AppleScript
     /// support, or Automation permission was declined), so which service it
     /// is on is unknown.
@@ -61,14 +62,19 @@ public enum BrowserScripting: Sendable, Equatable {
 }
 
 public enum AppKind: Sendable, Equatable {
-    case teams
+    /// An app that only holds the microphone open for a call, so that alone
+    /// reveals one.
+    case meetingApp(MeetingPlatform)
     case browser(BrowserScripting)
 }
 
 /// The rules for recognising meeting apps and meeting tabs. Pure, so they
 /// can be tested without a meeting.
 public enum MeetingClassifier {
-    static let teamsPrefixes = ["com.microsoft.teams"]
+    static let meetingApps: [(prefix: String, platform: MeetingPlatform)] = [
+        ("com.microsoft.teams", .teams),
+        ("com.tinyspeck.slackmacgap", .slack),
+    ]
 
     static let browsers: [(prefix: String, scripting: BrowserScripting)] = [
         ("com.google.Chrome", .chromium),
@@ -90,7 +96,9 @@ public enum MeetingClassifier {
     public static let webKitProcessPrefix = "com.apple.WebKit."
 
     public static func kind(ofApp bundleID: String) -> AppKind? {
-        if teamsPrefixes.contains(where: bundleID.hasPrefix) { return .teams }
+        if let app = meetingApps.first(where: { bundleID.hasPrefix($0.prefix) }) {
+            return .meetingApp(app.platform)
+        }
         if let browser = browsers.first(where: { bundleID.hasPrefix($0.prefix) }) {
             return .browser(browser.scripting)
         }
@@ -98,8 +106,8 @@ public enum MeetingClassifier {
     }
 
     /// The meeting open in a set of browser tabs, if any. Meet wins over Teams
-    /// when both are open, since a Meet tab is only ever a meeting while a
-    /// Teams tab is often just chat.
+    /// and Slack when both are open, since a Meet tab is only ever a meeting
+    /// while a Teams or Slack tab is often just chat.
     public static func meeting(in tabs: [BrowserTab])
         -> (platform: MeetingPlatform, title: String?, code: String?)? {
         if let meet = tabs.first(where: { isMeetCall($0.url) }) {
@@ -107,6 +115,9 @@ public enum MeetingClassifier {
         }
         if tabs.contains(where: { isTeamsWeb($0.url) }) {
             return (.teams, nil, nil)
+        }
+        if tabs.contains(where: { isSlackWeb($0.url) }) {
+            return (.slack, nil, nil)
         }
         return nil
     }
@@ -127,6 +138,11 @@ public enum MeetingClassifier {
     static func isTeamsWeb(_ url: String) -> Bool {
         guard let host = URL(string: url)?.host()?.lowercased() else { return false }
         return ["teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft"].contains(host)
+    }
+
+    /// Slack in a browser, where a huddle runs inside the workspace page.
+    static func isSlackWeb(_ url: String) -> Bool {
+        URL(string: url)?.host()?.lowercased() == "app.slack.com"
     }
 
     /// The meeting name from a Meet tab title such as "Meet – Weekly sync".

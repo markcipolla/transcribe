@@ -49,7 +49,7 @@ targets:
         NSHumanReadableCopyright: Copyright © 2026 Mark Cipolla
         NSMicrophoneUsageDescription: Transcribe listens to your microphone during meetings so your side of the conversation is in the transcript. Audio never leaves your Mac.
         NSAudioCaptureUsageDescription: Transcribe records the meeting audio playing on this Mac so the other participants are in the transcript. Audio never leaves your Mac.
-        NSAppleEventsUsageDescription: Transcribe reads your browser's list of open tabs to recognise when you are in a Google Meet or Teams call. Nothing else is read.
+        NSAppleEventsUsageDescription: Transcribe reads your browser's list of open tabs to recognise when you are in a Google Meet, Teams or Slack call. Nothing else is read.
         SUFeedURL: $(SPARKLE_FEED_URL)
         SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
         SUEnableAutomaticChecks: true

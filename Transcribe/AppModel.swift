@@ -6,10 +6,10 @@ import TranscribeKit
 
 /// The app's state and the decisions about when to record.
 ///
-/// Every couple of seconds it asks the detector whether a Meet or Teams call is
-/// going on. A call that shows up on two polls in a row starts a recording (if
-/// automatic recording is on), and a recording made for a call stops once the
-/// call has let go of the microphone for ``meetingEndGrace``.
+/// Every couple of seconds it asks the detector whether a Meet, Teams or Slack
+/// call is going on. A call that shows up on two polls in a row starts a
+/// recording (if automatic recording is on), and a recording made for a call
+/// stops once the call has let go of the microphone for ``meetingEndGrace``.
 @MainActor
 @Observable
 final class AppModel {
