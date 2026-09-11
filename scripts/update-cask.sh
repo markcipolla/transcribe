@@ -25,10 +25,17 @@ cask "transcribe" do
 
   # The app updates itself with Sparkle; brew should not fight it.
   auto_updates true
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
   depends_on arch: :arm64
 
   app "Transcribe.app"
+
+  # Releases are self-signed, not notarized, so Gatekeeper would refuse to open
+  # a quarantined copy. Sparkle clears the flag on the updates it installs.
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Transcribe.app"]
+  end
 
   uninstall quit: "com.markcipolla.Transcribe"
 

@@ -23,8 +23,8 @@ Core ML, Voz) can only build on macOS, so:
 - **Self-hosted:** `TranscribeCore`'s tests (chunking, speaker turns, echo
   removal, meeting classification, Markdown), plus the release's publish step
   (GitHub release, Homebrew cask).
-- **GitHub-hosted macOS:** the app build, the macOS-only tests, and signing and
-  notarization. macOS runners are free for public repositories.
+- **GitHub-hosted macOS:** the app build, the macOS-only tests, and signing.
+  macOS runners are free for public repositories.
 
 `Packages/TranscribeKit/Package.swift` declares the Mac-only targets inside
 `#if os(macOS)`. On Linux, `swift test` sees only `TranscribeCore` and never

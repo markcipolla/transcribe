@@ -1,30 +1,36 @@
 #!/usr/bin/env bash
-# Build a distributable Transcribe.app: archive, sign with Developer ID,
-# notarize, staple, zip, sign the zip for Sparkle, and write the appcast.
+# Build a distributable Transcribe.app: archive, sign, zip, sign the zip for
+# Sparkle, and write the appcast.
 #
 #   scripts/build-release.sh 1.2.0
 #
+# Releases are signed with a self-signed certificate and not notarized, so
+# Gatekeeper blocks a copy downloaded by hand; the Homebrew cask clears the
+# quarantine flag instead. The certificate still gives every build the same
+# identity, which keeps the microphone, audio capture and Automation grants
+# across updates. With a Developer ID identity the build is exported for
+# Developer ID and, given the NOTARY_* variables, notarized and stapled.
+#
 # Produces, in dist/:
-#   Transcribe-<version>.zip   the app, notarized and stapled
+#   Transcribe-<version>.zip   the app
 #   appcast.xml                Sparkle feed announcing this version
 #
 # Environment:
 #   BUILD_NUMBER            CFBundleVersion. Must grow with every release, since
 #                           it is what Sparkle compares. Default: commit count.
+#   SIGNING_IDENTITY        Default "Transcribe Self-Signed".
 #   NOTARY_KEY_PATH         App Store Connect API key (.p8) for notarytool,
-#   NOTARY_KEY_ID           with its key ID and issuer ID. Without them the
-#   NOTARY_ISSUER_ID        build is not notarized (fine for local testing only:
-#                           Gatekeeper and Homebrew will refuse it).
+#   NOTARY_KEY_ID           with its key ID and issuer ID. Used only with a
+#   NOTARY_ISSUER_ID        Developer ID identity.
 #   SPARKLE_KEY_PATH        EdDSA private key file for sign_update. Without it
 #                           the key is read from the login Keychain.
-#   SIGNING_IDENTITY        Default "Developer ID Application".
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${1:?usage: scripts/build-release.sh <version>}"
 VERSION="${VERSION#v}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD)}"
-IDENTITY="${SIGNING_IDENTITY:-Developer ID Application}"
+IDENTITY="${SIGNING_IDENTITY:-Transcribe Self-Signed}"
 TEAM_ID="7UB7J68BJQ"
 REPO="markcipolla/transcribe"
 DERIVED=".build/xcode"
@@ -47,18 +53,31 @@ mkdir -p .build/release "$DIST"
 step "Generating project"
 xcodegen generate --quiet
 
+DEVELOPER_ID=false
+[[ "$IDENTITY" == "Developer ID Application"* ]] && DEVELOPER_ID=true
+
+if $DEVELOPER_ID; then
+    SIGNING=(DEVELOPMENT_TEAM="$TEAM_ID" OTHER_CODE_SIGN_FLAGS="--timestamp")
+else
+    # A self-signed certificate has no Team ID, and the hardened runtime's
+    # library validation refuses to load a framework without one, so the app
+    # would crash on launch. The hardened runtime is only needed to notarize.
+    SIGNING=(DEVELOPMENT_TEAM="" ENABLE_HARDENED_RUNTIME=NO)
+fi
+
 step "Archiving $VERSION ($BUILD_NUMBER)"
 xcodebuild archive \
     -project Transcribe.xcodeproj -scheme Transcribe -configuration Release \
     -derivedDataPath "$DERIVED" -archivePath "$ARCHIVE" -skipPackagePluginValidation \
     ARCHS=arm64 \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$IDENTITY" DEVELOPMENT_TEAM="$TEAM_ID" \
-    OTHER_CODE_SIGN_FLAGS="--timestamp" \
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$IDENTITY" "${SIGNING[@]}" \
     -quiet
 
-step "Exporting with $IDENTITY"
-cat > .build/release/ExportOptions.plist <<PLIST
+APP="$EXPORT/Transcribe.app"
+if $DEVELOPER_ID; then
+    step "Exporting with $IDENTITY"
+    cat > .build/release/ExportOptions.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -70,12 +89,16 @@ cat > .build/release/ExportOptions.plist <<PLIST
 </dict>
 </plist>
 PLIST
-xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
-    -exportOptionsPlist .build/release/ExportOptions.plist -quiet
-APP="$EXPORT/Transcribe.app"
+    xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
+        -exportOptionsPlist .build/release/ExportOptions.plist -quiet
+else
+    # Nothing to export for: the archive already holds the signed app.
+    mkdir -p "$EXPORT"
+    ditto "$ARCHIVE/Products/Applications/Transcribe.app" "$APP"
+fi
 codesign --verify --deep --strict "$APP"
 
-if [[ -n "${NOTARY_KEY_PATH:-}" ]]; then
+if $DEVELOPER_ID && [[ -n "${NOTARY_KEY_PATH:-}" ]]; then
     step "Notarizing"
     ditto -c -k --keepParent "$APP" .build/release/notarize.zip
     xcrun notarytool submit .build/release/notarize.zip \
@@ -83,7 +106,7 @@ if [[ -n "${NOTARY_KEY_PATH:-}" ]]; then
         --wait --timeout 30m
     xcrun stapler staple "$APP"
     spctl --assess --type execute --verbose "$APP"
-else
+elif $DEVELOPER_ID; then
     echo "warning: NOTARY_KEY_PATH not set; this build is NOT notarized." >&2
 fi
 

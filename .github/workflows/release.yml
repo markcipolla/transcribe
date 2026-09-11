@@ -2,12 +2,16 @@ name: Release
 
 # Push a `v*` tag to ship a version:
 #
-#   build    (GitHub-hosted macOS)  archive, sign with Developer ID, notarize,
-#                                   zip, sign for Sparkle, write the appcast.
-#                                   Needs a Mac, and no self-hosted runner is one.
+#   build    (GitHub-hosted macOS)  archive, sign, zip, sign for Sparkle, write
+#                                   the appcast. Needs a Mac, and no self-hosted
+#                                   runner is one.
 #   publish  (self-hosted Linux)    create the GitHub release (which moves the
 #                                   Sparkle feed, .../releases/latest/download/
 #                                   appcast.xml) and update the Homebrew cask.
+#
+# The build signs with whichever certificate SIGNING_CERTIFICATE_P12 holds: the
+# self-signed one today, which is not notarized. Put a Developer ID certificate
+# there and add the NOTARY_* secrets to notarize instead.
 #
 # Tag pushes need write access, so fork code cannot reach the self-hosted job.
 # Secrets are listed in RELEASING.md.
@@ -34,26 +38,24 @@ jobs:
 
       - name: Check signing secrets are configured
         env:
-          HAS_CERT: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 != '' }}
-          HAS_NOTARY: ${{ secrets.NOTARY_API_KEY_P8 != '' }}
+          HAS_CERT: ${{ secrets.SIGNING_CERTIFICATE_P12 != '' }}
           HAS_SPARKLE: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
         run: |
           missing=""
-          [ "$HAS_CERT" = "true" ] || missing="$missing DEVELOPER_ID_CERTIFICATE_P12"
-          [ "$HAS_NOTARY" = "true" ] || missing="$missing NOTARY_API_KEY_P8"
+          [ "$HAS_CERT" = "true" ] || missing="$missing SIGNING_CERTIFICATE_P12"
           [ "$HAS_SPARKLE" = "true" ] || missing="$missing SPARKLE_PRIVATE_KEY"
           if [ -n "$missing" ]; then
-            echo "::error::Missing secrets:$missing. Releases must be signed, notarized and Sparkle-signed, or Gatekeeper, Homebrew and the updater will refuse them. See RELEASING.md."
+            echo "::error::Missing secrets:$missing. Without a stable signature every update resets the app's permissions, and without the Sparkle key the updater refuses it. See RELEASING.md."
             exit 1
           fi
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Import the Developer ID certificate
+      - name: Import the signing certificate
         env:
-          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          CERTIFICATE_P12: ${{ secrets.SIGNING_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
         run: |
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
@@ -62,12 +64,18 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$KEYCHAIN"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+            -A -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           # Split on purpose: one argument per existing keychain.
           # shellcheck disable=SC2046
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           rm "$RUNNER_TEMP/certificate.p12"
+          # Sign as whatever the certificate is called. No -v: a self-signed
+          # certificate is untrusted, which codesign does not mind.
+          IDENTITY="$(security find-identity -p codesigning "$KEYCHAIN" | sed -n 's/^ *1) [0-9A-F]* "\(.*\)".*/\1/p')"
+          [ -n "$IDENTITY" ] || { echo "::error::No code signing identity in SIGNING_CERTIFICATE_P12."; exit 1; }
+          echo "Signing as $IDENTITY"
+          echo "SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Write the notary and Sparkle keys
         env:
@@ -75,12 +83,14 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           umask 077
-          printf '%s' "$NOTARY_API_KEY_P8" > "$RUNNER_TEMP/notary.p8"
           printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle.key"
+          if [ -n "$NOTARY_API_KEY_P8" ]; then
+            printf '%s' "$NOTARY_API_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+            echo "NOTARY_KEY_PATH=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+          fi
 
-      - name: Build, sign and notarize
+      - name: Build and sign
         env:
-          NOTARY_KEY_PATH: ${{ runner.temp }}/notary.p8
           NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
           SPARKLE_KEY_PATH: ${{ runner.temp }}/sparkle.key
