@@ -1,3 +1,4 @@
+import DesertAnt
 import Foundation
 import Gist
 import Observation
@@ -13,6 +14,10 @@ public final class TopicTagger {
     public static let maxTopics = 3
 
     public private(set) var state: ModelDownloadState
+
+    /// A newer model revision the Hub is offering. See
+    /// ``TranscriptionEngine/newerRevision`` for the semantics.
+    public private(set) var newerRevision: String?
 
     @ObservationIgnored private let gist = Gist()
     @ObservationIgnored private let log = Logger(subsystem: "Transcribe", category: "Topics")
@@ -54,6 +59,14 @@ public final class TopicTagger {
         if !isDownloaded { log.info("Topic model downloaded") }
         UserDefaults.standard.set(true, forKey: Self.downloadedKey)
         state = .downloaded
+    }
+
+    /// Ask the Hub whether a newer model revision exists within this SDK's
+    /// major-version range, and remember it on ``newerRevision`` if so.
+    public func checkForUpdate() async {
+        let latest = await GistModel.distribution
+            .resolving(.from(GistModel.revision)).revision
+        newerRevision = latest == GistModel.revision ? nil : latest
     }
 
     /// The transcript's main topics, most prominent first.

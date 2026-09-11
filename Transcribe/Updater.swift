@@ -16,6 +16,11 @@ final class Updater: NSObject {
     /// meeting would cut the recording short, so it waits until it finishes.
     @ObservationIgnored var isBusy: () -> Bool = { false }
 
+    /// Extra work to run whenever the user asks to check for updates. Set by
+    /// ``AppModel`` so a manual check also asks the Hub whether the bundled
+    /// speech and title models have newer revisions available.
+    @ObservationIgnored var onCheck: () -> Void = {}
+
     private(set) var canCheckForUpdates = false
     let isConfigured: Bool
 
@@ -49,6 +54,7 @@ final class Updater: NSObject {
     func checkForUpdates() {
         NSApp.activate()
         controller.checkForUpdates(nil)
+        onCheck()
     }
 
     /// Called when a recording ends, to let a postponed update install.

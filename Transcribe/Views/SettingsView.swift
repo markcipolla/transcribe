@@ -58,6 +58,7 @@ struct SettingsView: View {
                     ModelDownloadStatus(name: "title model", size: "286 MB",
                                         ready: "Ready. Runs on this Mac's GPU.",
                                         state: model.titleWriter.state,
+                                        newerRevision: model.titleWriter.newerRevision,
                                         download: model.downloadTitleModel)
                 }
             } header: {
@@ -77,6 +78,7 @@ struct SettingsView: View {
                     ModelDownloadStatus(name: "topic model", size: "74 MB",
                                         ready: "Ready. Runs on this Mac.",
                                         state: model.tagger.state,
+                                        newerRevision: model.tagger.newerRevision,
                                         download: model.downloadTopicModel)
                 }
             } header: {
@@ -130,33 +132,45 @@ private struct ModelDownloadStatus: View {
     /// Shown once it is on disk.
     let ready: String
     let state: ModelDownloadState
+    /// A newer model revision the Hub is offering, when the last update check
+    /// found one. Displayed as a subtle note; the newer revision arrives with
+    /// the next app update rather than being fetched from here.
+    let newerRevision: String?
     let download: () -> Void
 
     var body: some View {
-        switch state {
-        case .notDownloaded:
-            HStack {
-                Label("Model not downloaded (\(size))", systemImage: "arrow.down.circle")
+        VStack(alignment: .leading, spacing: 4) {
+            switch state {
+            case .notDownloaded:
+                HStack {
+                    Label("Model not downloaded (\(size))", systemImage: "arrow.down.circle")
+                        .font(.callout)
+                    Spacer()
+                    Button("Download", action: download)
+                }
+            case .downloading(let progress):
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Downloading \(name)… \(Int(progress * 100))%").font(.callout)
+                    ProgressView(value: progress)
+                }
+            case .downloaded:
+                Label(ready, systemImage: "checkmark.circle.fill")
                     .font(.callout)
-                Spacer()
-                Button("Download", action: download)
+                    .foregroundStyle(.green)
+            case .failed(let message):
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("The \(name) could not download", systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                    Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                    Button("Try Again", action: download)
+                }
             }
-        case .downloading(let progress):
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Downloading \(name)… \(Int(progress * 100))%").font(.callout)
-                ProgressView(value: progress)
-            }
-        case .downloaded:
-            Label(ready, systemImage: "checkmark.circle.fill")
-                .font(.callout)
-                .foregroundStyle(.green)
-        case .failed(let message):
-            VStack(alignment: .leading, spacing: 4) {
-                Label("The \(name) could not download", systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(3)
-                Button("Try Again", action: download)
+            if let newerRevision {
+                Label("The \(name) \(newerRevision) is available in a newer Transcribe.",
+                      systemImage: "sparkles")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
