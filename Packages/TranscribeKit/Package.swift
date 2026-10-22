@@ -30,7 +30,7 @@ products += [
 dependencies += [
     // The MLX trait is what gives Title a working model. Without it the
     // module builds as a stub with no way to create one.
-    .package(url: "https://github.com/Desert-Ant-Labs/desert-ant-core.git", from: "3.1.0",
+    .package(url: "https://github.com/Desert-Ant-Labs/desert-ant-core.git", from: "4.1.0",
              traits: ["MLX"]),
 ]
 targets += [
