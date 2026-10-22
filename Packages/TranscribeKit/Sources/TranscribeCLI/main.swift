@@ -148,7 +148,7 @@ func downloadedTitleWriter() async throws -> TitleWriter {
 func detect() async {
     print("Processes using the microphone:")
     for process in AudioProcessList.usingMicrophone() {
-        print("  pid \(process.pid)  \(process.bundleID)  (app: \(process.appBundleID))")
+        print("  pid \(process.pid)  \(process.bundleID)  (app: \(process.appBundleID) pid \(process.appPID))")
     }
     if let meeting = await MeetingDetector().detect() {
         print("Meeting: \(meeting.platform.rawValue) in \(meeting.appName)\(meeting.title.map { " — \($0)" } ?? "")")

@@ -18,6 +18,11 @@ public struct DetectedMeeting: Sendable, Equatable {
     /// The app whose microphone use revealed the meeting. Detection watches it
     /// to tell when the meeting is over.
     public let appBundleID: String
+    /// The process holding the microphone, which is what detection actually
+    /// watches. Browsers run in several copies at once — yours and a
+    /// WebDriver's share `appBundleID`, so the bundle alone cannot say whether
+    /// this call is still going. 0 for a meeting not tied to a process.
+    public let appPID: Int32
     public let appName: String
     /// The meeting's name, when the app exposes one.
     public let title: String?
@@ -25,10 +30,11 @@ public struct DetectedMeeting: Sendable, Equatable {
     /// code (`abc-defg-hij`). Nil where the app does not expose one.
     public let meetingCode: String?
 
-    public init(platform: MeetingPlatform, appBundleID: String, appName: String,
-                title: String?, meetingCode: String? = nil) {
+    public init(platform: MeetingPlatform, appBundleID: String, appPID: Int32 = 0,
+                appName: String, title: String?, meetingCode: String? = nil) {
         self.platform = platform
         self.appBundleID = appBundleID
+        self.appPID = appPID
         self.appName = appName
         self.title = title
         self.meetingCode = meetingCode
