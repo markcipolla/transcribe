@@ -25,6 +25,7 @@ public actor MeetingDetector {
     public func detect() async -> DetectedMeeting? {
         let apps = Self.microphoneApps()
         var unverifiedBrowser: DetectedMeeting?
+        var siteApp: DetectedMeeting?
         var meetingApp: DetectedMeeting?
 
         for app in apps {
@@ -33,21 +34,29 @@ public actor MeetingDetector {
                 meetingApp = meetingApp ?? DetectedMeeting(
                     platform: platform, appBundleID: app, appName: Self.name(of: app), title: nil)
             case .browser(let scripting):
-                guard let tabs = await tabs(of: app, scripting: scripting) else {
-                    unverifiedBrowser = unverifiedBrowser ?? DetectedMeeting(
-                        platform: .browserCall, appBundleID: app, appName: Self.name(of: app), title: nil)
-                    continue
-                }
-                if let match = MeetingClassifier.meeting(in: tabs) {
+                let tabs = await tabs(of: app, scripting: scripting)
+                if let tabs, let match = MeetingClassifier.meeting(in: tabs) {
                     return DetectedMeeting(platform: match.platform, appBundleID: app,
                                            appName: Self.name(of: app), title: match.title,
                                            meetingCode: match.code)
+                }
+                // A meeting PWA's window is in neither list: the browser's tab
+                // scripting leaves it out, and the PWA's own bundle has no
+                // scripting. The app running is the evidence. `app` stays the
+                // bundle ID that holds the microphone, which is what tells us
+                // when the call is over.
+                if let site = Self.runningMeetingSiteApp() {
+                    siteApp = siteApp ?? DetectedMeeting(
+                        platform: site.platform, appBundleID: app, appName: site.name, title: nil)
+                } else if tabs == nil {
+                    unverifiedBrowser = unverifiedBrowser ?? DetectedMeeting(
+                        platform: .browserCall, appBundleID: app, appName: Self.name(of: app), title: nil)
                 }
             case nil:
                 continue
             }
         }
-        return meetingApp ?? unverifiedBrowser
+        return meetingApp ?? siteApp ?? unverifiedBrowser
     }
 
     /// Whether the app that revealed `meeting` still has the microphone open.
@@ -88,6 +97,22 @@ public actor MeetingDetector {
             apps.insert(running)
         }
         return apps
+    }
+
+    /// A running single-site browser app for a meeting service, such as the
+    /// Google Meet PWA installed from Chrome.
+    ///
+    // ponytail: an idle Meet PWA plus unrelated browser microphone use reads as
+    // a call. Narrow it by reading the PWA's window title if that ever bites.
+    static func runningMeetingSiteApp() -> (platform: MeetingPlatform, name: String)? {
+        for app in NSWorkspace.shared.runningApplications {
+            guard let id = app.bundleIdentifier, MeetingClassifier.isSiteApp(id),
+                  let name = app.localizedName,
+                  let platform = MeetingClassifier.siteAppPlatform(named: name)
+            else { continue }
+            return (platform, name)
+        }
+        return nil
     }
 
     /// `bundleID` if it is a running app, else the nearest running app whose ID

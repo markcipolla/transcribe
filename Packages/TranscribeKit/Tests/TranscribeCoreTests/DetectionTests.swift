@@ -43,6 +43,26 @@ struct MeetingClassifierTests {
         #expect(!first.isSameMeeting(as: next))
     }
 
+    @Test func findsAMeetCallUnderThePathPrefix() {
+        // meet.google.com/<code> redirects to meet.google.com/meet/<code>.
+        let tabs = [BrowserTab(url: "https://meet.google.com/meet/abc-defg-hij", title: "Meet – Standup")]
+        let match = MeetingClassifier.meeting(in: tabs)
+        #expect(match?.platform == .googleMeet)
+        #expect(match?.code == "abc-defg-hij")
+    }
+
+    @Test func recognisesSingleSiteBrowserApps() {
+        #expect(MeetingClassifier.isSiteApp("com.google.Chrome.app.kjgfgldnnfoeklkmfkjfagphfepbbdan"))
+        #expect(MeetingClassifier.isSiteApp("com.google.Chrome.app.Default-hmjkmjkepdijhoojdojkdfohbdgmmhki"))
+        #expect(MeetingClassifier.isSiteApp("com.microsoft.edgemac.app.abc"))
+        #expect(!MeetingClassifier.isSiteApp("com.google.Chrome"))
+        #expect(!MeetingClassifier.isSiteApp("com.google.Chrome.helper"))
+        #expect(MeetingClassifier.siteAppPlatform(named: "Google Meet") == .googleMeet)
+        #expect(MeetingClassifier.siteAppPlatform(named: "Microsoft Teams") == .teams)
+        #expect(MeetingClassifier.siteAppPlatform(named: "Slack") == .slack)
+        #expect(MeetingClassifier.siteAppPlatform(named: "Google Keep - Notes and Lists") == nil)
+    }
+
     @Test func meetLandingPageIsNotACall() {
         let tabs = [BrowserTab(url: "https://meet.google.com/landing", title: "Google Meet")]
         #expect(MeetingClassifier.meeting(in: tabs) == nil)

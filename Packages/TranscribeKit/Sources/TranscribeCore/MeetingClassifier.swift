@@ -95,6 +95,24 @@ public enum MeetingClassifier {
     /// lives outside any app bundle.
     public static let webKitProcessPrefix = "com.apple.WebKit."
 
+    /// A single-site browser app: a PWA installed from Chrome or Edge, which
+    /// gets its own bundle (`com.google.Chrome.app.<id>`), one window, and no
+    /// tab scripting — neither its own, nor a place in its browser's tab list.
+    public static func isSiteApp(_ bundleID: String) -> Bool {
+        browsers.contains { bundleID.hasPrefix($0.prefix + ".app.") }
+    }
+
+    /// The service a single-site app is for, from its name ("Google Meet").
+    /// Like the Slack and Teams apps these only hold the microphone during a
+    /// call, so the app being there at all is enough.
+    public static func siteAppPlatform(named name: String) -> MeetingPlatform? {
+        let name = name.lowercased()
+        if name.contains("meet") { return .googleMeet }
+        if name.contains("teams") { return .teams }
+        if name.contains("slack") { return .slack }
+        return nil
+    }
+
     public static func kind(ofApp bundleID: String) -> AppKind? {
         if let app = meetingApps.first(where: { bundleID.hasPrefix($0.prefix) }) {
             return .meetingApp(app.platform)
@@ -123,7 +141,8 @@ public enum MeetingClassifier {
     }
 
     // Computed because `Regex` is not Sendable and so cannot be a stored static.
-    private static var meetCallPattern: Regex<Substring> { #/^https?://meet\.google\.com/[a-z]{3,}-[a-z]{4,}-[a-z]{3,}/# }
+    // Meet serves calls at /meet/<code> now, and redirects the bare /<code> to it.
+    private static var meetCallPattern: Regex<Substring> { #/^https?://meet\.google\.com/(?:[a-z0-9]+/)*[a-z]{3,}-[a-z]{4,}-[a-z]{3,}/# }
     private static var meetCodePattern: Regex<Substring> { #/[a-z]{3,}-[a-z]{4,}-[a-z]{3,}/# }
 
     static func isMeetCall(_ url: String) -> Bool {
