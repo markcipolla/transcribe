@@ -12,7 +12,7 @@ struct ModelStatusView: View {
             switch model.engine.state {
             case .notDownloaded:
                 HStack {
-                    Label("Speech model not downloaded (467 MB)", systemImage: "arrow.down.circle")
+                    Label("Speech model not downloaded (337 MB)", systemImage: "arrow.down.circle")
                         .font(.callout)
                     Spacer()
                     Button("Download") { load() }

@@ -1,6 +1,6 @@
 DERIVED := .build/xcode
 # Release by default: in a Debug build the Voz SDK's dependencies are
-# unoptimized, and its one-time SHA-256 check of the 467 MB model takes minutes.
+# unoptimized, and its one-time SHA-256 check of the 337 MB model takes minutes.
 CONFIG ?= Release
 APP := $(DERIVED)/Build/Products/$(CONFIG)/Transcribe.app
 PACKAGE := Packages/TranscribeKit

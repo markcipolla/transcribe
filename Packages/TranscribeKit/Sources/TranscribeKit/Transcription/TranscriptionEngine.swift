@@ -40,7 +40,7 @@ public final class TranscriptionEngine {
     /// Where the verified model lives, remembered per model revision.
     ///
     /// The SDK's own availability check and its loading initializer both
-    /// SHA-256 the whole 467 MB model on every call: a second or two in a
+    /// SHA-256 the whole 337 MB model on every call: a second or two in a
     /// release build, minutes in a debug one, and far too slow for the main
     /// thread. So the model is verified once, when it is downloaded, and later
     /// launches load it straight from this directory.
