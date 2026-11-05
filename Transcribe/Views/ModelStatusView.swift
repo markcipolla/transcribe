@@ -48,7 +48,7 @@ struct ModelStatusView: View {
                 EmptyView()
             }
             if let newer = model.engine.newerRevision {
-                Label("Speech model \(newer) is available in a newer Transcribe.",
+                Label("Speech model \(newer) is out. A coming Transcribe update brings it.",
                       systemImage: "sparkles")
                     .font(.caption)
                     .foregroundStyle(.secondary)

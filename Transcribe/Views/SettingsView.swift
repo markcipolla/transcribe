@@ -167,7 +167,7 @@ private struct ModelDownloadStatus: View {
                 }
             }
             if let newerRevision {
-                Label("The \(name) \(newerRevision) is available in a newer Transcribe.",
+                Label("The \(name) \(newerRevision) is out. A coming Transcribe update brings it.",
                       systemImage: "sparkles")
                     .font(.caption)
                     .foregroundStyle(.secondary)
