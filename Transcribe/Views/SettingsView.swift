@@ -10,7 +10,7 @@ struct SettingsView: View {
         @Bindable var settings = model.settings
 
         Form {
-            Section("Transcripts") {
+            Section {
                 LabeledContent("Save to") {
                     HStack {
                         if let directory = settings.outputDirectory {
@@ -28,6 +28,22 @@ struct SettingsView: View {
                 }
                 TextField("Your name", text: $settings.speakerName, prompt: Text("Me"))
                 TextField("Everyone else", text: $settings.othersLabel, prompt: Text("Others"))
+                Toggle("Name the other speakers from the call window", isOn: $settings.nameSpeakers)
+                if settings.nameSpeakers, !CallWatcher.isTrusted {
+                    HStack {
+                        Text("Needs the Accessibility permission").foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Settings…") {
+                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                        }
+                    }
+                }
+            } header: {
+                Text("Transcripts")
+            } footer: {
+                Text("Reads who Meet, Teams or Slack shows talking, on this Mac. If an app changes and names stop working, Transcribe offers to report it on GitHub with names masked.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

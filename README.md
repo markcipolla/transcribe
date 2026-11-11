@@ -38,6 +38,18 @@ the microphone. The two are transcribed separately, which is how the transcript
 knows who spoke without any diarization. If you're on speakers, microphone turns
 that just repeat the meeting audio are dropped as echo.
 
+**Naming speakers.** With the *Accessibility* permission, the app reads the
+call window twice a second while it records. In Meet that's the tile Meet marks
+as talking. In Teams and Slack it's labels such as "Name, speaking". Each line
+of meeting audio is named after the one person shown talking for most of it,
+or the only other person in a two-person call. Anything unclear stays
+"Others", and nothing read leaves the Mac. Call apps change their windows
+without notice. When a call with three or more people never shows anyone
+talking, the app offers to report it on GitHub, if no issue for that app is
+already open. The report has a copy of the window's structure with the names
+masked. You review it before submitting, from your own account. Turn naming
+off in Settings.
+
 **Transcribing.** Audio is cut into ~30 second chunks at the quietest moment
 near each boundary and handed to Voz, which runs on the Neural Engine at about
 100× realtime. The transcript file is rewritten after every chunk, so it's

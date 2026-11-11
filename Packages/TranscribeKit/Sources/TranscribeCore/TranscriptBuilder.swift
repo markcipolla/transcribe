@@ -6,12 +6,16 @@ public struct TranscriptSegment: Sendable, Equatable {
     public let start: TimeInterval
     public let end: TimeInterval
     public let text: String
+    /// Who said it, for meeting audio the call app named. Nil means the
+    /// source's label: you for the microphone, Others for the meeting.
+    public let speaker: String?
 
-    public init(source: AudioSource, start: TimeInterval, end: TimeInterval, text: String) {
+    public init(source: AudioSource, start: TimeInterval, end: TimeInterval, text: String, speaker: String? = nil) {
         self.source = source
         self.start = start
         self.end = end
         self.text = text
+        self.speaker = speaker
     }
 }
 
@@ -22,29 +26,52 @@ public enum TranscriptBuilder {
     /// Consecutive turns from the same speaker are merged up to this length.
     public static let maxTurnDuration: TimeInterval = 90
 
-    public static func segments(from words: [TranscribedWord]) -> [TranscriptSegment] {
+    /// - Parameters:
+    ///   - callSamples: readings of the call app, in time order, which name
+    ///     the meeting audio's speakers. Empty leaves it all as Others.
+    ///   - myNames: your own names, never given to the other side.
+    public static func segments(from words: [TranscribedWord], callSamples: [CallSample] = [],
+                                myNames: [String] = []) -> [TranscriptSegment] {
         let system = words.filter { $0.source == .system }
         let microphone = removeEcho(from: words.filter { $0.source == .microphone }, heardIn: system)
-        let turns = (split(system) + split(microphone)).sorted { $0.start < $1.start }
+        let named = split(system, callSamples: callSamples, myNames: myNames)
+        let turns = (named + split(microphone)).sorted { $0.start < $1.start }
         return mergeConsecutive(turns)
     }
 
-    /// Break one source's words into turns at pauses.
-    static func split(_ words: [TranscribedWord]) -> [TranscriptSegment] {
+    /// Break one source's words into turns at pauses, and, with call
+    /// readings, where the person the app shows talking changes.
+    static func split(_ words: [TranscribedWord], callSamples: [CallSample] = [],
+                      myNames: [String] = []) -> [TranscriptSegment] {
         let words = words.sorted { $0.start < $1.start }
         var segments: [TranscriptSegment] = []
         var current: [TranscribedWord] = []
+        var currentName: String?
+
+        func nameAt(_ word: TranscribedWord) -> String? {
+            callSamples.isEmpty ? nil : SpeakerAttribution.name(
+                start: (word.start + word.end) / 2, end: (word.start + word.end) / 2,
+                samples: callSamples, myNames: myNames)
+        }
 
         func close() {
             guard let first = current.first, let last = current.last else { return }
+            let speaker = callSamples.isEmpty ? nil : SpeakerAttribution.name(
+                start: first.start, end: last.end, samples: callSamples, myNames: myNames)
             segments.append(TranscriptSegment(source: first.source, start: first.start,
-                                              end: last.end, text: join(current)))
+                                              end: last.end, text: join(current), speaker: speaker))
             current = []
+            currentName = nil
         }
 
         for word in words {
-            if let last = current.last, word.start - last.end >= turnPause { close() }
+            let name = nameAt(word)
+            if let last = current.last {
+                let changed = name != nil && currentName != nil && name != currentName
+                if word.start - last.end >= turnPause || changed { close() }
+            }
             current.append(word)
+            currentName = name ?? currentName
         }
         close()
         return segments
@@ -55,11 +82,11 @@ public enum TranscriptBuilder {
     static func mergeConsecutive(_ segments: [TranscriptSegment]) -> [TranscriptSegment] {
         var merged: [TranscriptSegment] = []
         for segment in segments {
-            if let last = merged.last, last.source == segment.source,
+            if let last = merged.last, last.source == segment.source, last.speaker == segment.speaker,
                segment.end - last.start <= maxTurnDuration {
                 merged[merged.count - 1] = TranscriptSegment(
                     source: last.source, start: last.start, end: max(last.end, segment.end),
-                    text: last.text + " " + segment.text)
+                    text: last.text + " " + segment.text, speaker: last.speaker)
             } else {
                 merged.append(segment)
             }

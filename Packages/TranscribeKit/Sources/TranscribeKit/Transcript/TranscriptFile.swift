@@ -6,15 +6,27 @@ public actor TranscriptFile {
     public private(set) var url: URL
     private var metadata: TranscriptMetadata
     private var words: [TranscribedWord] = []
+    private var callSamples: [CallSample] = []
+    private let myNames: [String]
 
-    public init(url: URL, metadata: TranscriptMetadata) {
+    /// - Parameter myNames: your own names, never given to anyone else in the call.
+    public init(url: URL, metadata: TranscriptMetadata, myNames: [String] = []) {
         self.url = url
         self.metadata = metadata
+        self.myNames = myNames
     }
 
     public var wordCount: Int { words.count }
+    public var systemWordCount: Int { words.count { $0.source == .system } }
 
-    public var segments: [TranscriptSegment] { TranscriptBuilder.segments(from: words) }
+    public var segments: [TranscriptSegment] {
+        TranscriptBuilder.segments(from: words, callSamples: callSamples, myNames: myNames)
+    }
+
+    /// The call app's readings so far, which name the meeting audio's speakers.
+    public func setCallSamples(_ samples: [CallSample]) {
+        callSamples = samples
+    }
 
     public func append(_ newWords: [TranscribedWord]) {
         words.append(contentsOf: newWords)

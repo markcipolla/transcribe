@@ -133,10 +133,19 @@ final class AppModel {
             startedAt: Date(),
             microphoneLabel: settings.speakerName.isEmpty ? "Me" : settings.speakerName,
             systemLabel: settings.othersLabel.isEmpty ? "Others" : settings.othersLabel)
+        let watcher = settings.nameSpeakers ? meeting.flatMap { CallWatcher(meeting: $0, startedAt: metadata.startedAt) } : nil
+        if watcher != nil, !CallWatcher.isTrusted, !UserDefaults.standard.bool(forKey: "askedForAccessibility") {
+            // Once: after that, Settings says what is missing. Granted now, it
+            // takes effect from the next call.
+            UserDefaults.standard.set(true, forKey: "askedForAccessibility")
+            CallWatcher.requestTrust()
+        }
         let session = RecordingSession(metadata: metadata, directory: directory,
                                        captureMicrophone: settings.captureMicrophone, engine: engine,
                                        tagger: settings.tagTopics ? tagger : nil,
-                                       titleWriter: settings.writeTitles ? titleWriter : nil)
+                                       titleWriter: settings.writeTitles ? titleWriter : nil,
+                                       callWatcher: watcher,
+                                       myNames: [settings.speakerName, NSFullUserName()])
         do {
             try await session.start()
         } catch {
@@ -187,6 +196,50 @@ final class AppModel {
                           fileURL: session.fileURL)
         }
         updater.recordingFinished()
+        if let report = session.speakerNamingReport { Task { await offer(report) } }
+    }
+
+    // MARK: - Speaker naming reports
+
+    /// Offer to file `report` as a GitHub issue, unless one is already open
+    /// for that app, this copy is out of date (the fix may be in an update),
+    /// or it was already offered for this app and version.
+    private func offer(_ report: SpeakerNamingReport) async {
+        guard settings.notifications else { return }
+        let offeredKey = "offeredNamingReport.\(report.platform.rawValue).\(report.transcribeVersion)"
+        guard !UserDefaults.standard.bool(forKey: offeredKey) else { return }
+        do {
+            struct Release: Decodable { let tag_name: String }
+            struct Search: Decodable { let total_count: Int }
+            let latest = try await Self.gitHub(Release.self, URL(string: "https://api.github.com/repos/\(SpeakerNamingReport.repository)/releases/latest")!)
+            guard latest.tag_name.trimmingCharacters(in: CharacterSet(charactersIn: "v")) == report.transcribeVersion else {
+                log.info("Speaker naming report skipped: \(report.transcribeVersion, privacy: .public) is not the latest release")
+                return
+            }
+            let open = try await Self.gitHub(Search.self, SpeakerNamingReport.openIssueSearchURL(for: report.platform))
+            UserDefaults.standard.set(true, forKey: offeredKey)
+            guard open.total_count == 0 else {
+                log.info("Speaker naming report skipped: an issue for \(report.platform.rawValue, privacy: .public) is already open")
+                return
+            }
+            let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Transcribe/Reports", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let dump = folder.appendingPathComponent("\(report.platform.rawValue) call window \(Int(Date().timeIntervalSince1970)).json")
+            try report.dumpJSON().write(to: dump)
+            notifier.post(title: "Speaker names didn't work in \(report.platform.rawValue)",
+                          body: "\(report.platform.rawValue) may have changed. Click to report it on GitHub; names are masked and you see it before sending.",
+                          link: report.newIssueURL, reveal: dump)
+        } catch {
+            log.error("Speaker naming report failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private static func gitHub<T: Decodable>(_ type: T.Type, _ url: URL) async throws -> T {
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     func downloadTitleModel() {
