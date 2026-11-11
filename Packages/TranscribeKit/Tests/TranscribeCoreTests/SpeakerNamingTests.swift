@@ -85,8 +85,8 @@ struct SpeakerNamingTests {
     }
 
     @Test func dumpsHideNamesButKeepTheShape() {
-        #expect(AXDump.mask("Ann Lee, muted") == "Aaa Aaa, muted")
-        #expect(AXDump.mask("Room 42 (You)") == "Aaaa 00 (You)")
+        #expect(AXDump.mask("Ann Lee, muted") == "🔳🔳🔳 🔳🔳🔳, muted")
+        #expect(AXDump.mask("Room 42 (You)") == "🔳🔳🔳🔳 🔲🔲 (You)")
         let report = SpeakerNamingReport(platform: .googleMeet, app: "Google Chrome 142", transcribeVersion: "1.0.0",
                                          macOSVersion: "15.1", problem: "x", windows: meetWindow([("Ann Lee", true)]))
         let body = report.body()

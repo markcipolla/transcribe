@@ -235,8 +235,8 @@ extension AXNode {
 
 /// A call window's tree with the people taken out, for a public issue.
 ///
-/// Letters become `a`/`A` and digits `0`, so "Ann Lee, muted" reads
-/// "Aaa Aaa, muted": the shape of a label survives, the name does not. Words
+/// Letters become 🔳 and digits 🔲, so "Ann Lee, muted" reads
+/// "🔳🔳🔳 🔳🔳🔳, muted": the shape of a label survives, the name does not. Words
 /// the call apps use for their own UI stay, so a renamed label can be seen.
 /// DOM classes and identifiers are the app's code, not anyone's data, and stay.
 public enum AXDump {
@@ -254,8 +254,8 @@ public enum AXDump {
             let bare = word.lowercased().filter(\.isLetter)
             if uiWords.contains(bare) { return String(word) }
             return String(word.map { c -> Character in
-                if c.isLetter { return c.isUppercase ? "A" : "a" }
-                if c.isNumber { return "0" }
+                if c.isLetter { return "🔳" }
+                if c.isNumber { return "🔲" }
                 return c
             })
         }.joined(separator: " ")

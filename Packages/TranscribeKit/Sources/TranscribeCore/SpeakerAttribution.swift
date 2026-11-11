@@ -142,7 +142,7 @@ public struct SpeakerNamingReport: Sendable {
         - \(app)
         - macOS \(macOSVersion)
 
-        Names and other text in the dump below are masked (letters → `a`, digits → `0`). \
+        Names and other text in the dump below are masked (letters → 🔳, digits → 🔲). \
         Please drag the full dump file Transcribe showed you in Finder into this issue.
 
         <details><summary>Call window, outlined</summary>
