@@ -79,7 +79,7 @@ public enum TranscriptRenderer {
             "- **Date:** \(longDate(metadata.startedAt))",
             "- **Platform:** \(metadata.platform.rawValue)",
             "- **Duration:** \(humanDuration(duration))",
-            "- **Speakers:** \(metadata.microphoneLabel) (microphone), \(metadata.systemLabel) (meeting audio)",
+            "- **Speakers:** \(metadata.microphoneLabel) (microphone), \(meetingSpeakers(metadata, segments)) (meeting audio)",
         ]
         if !topics.isEmpty {
             lines.append("- **Topics:** \(topics.map(\.name).joined(separator: ", "))")
@@ -90,7 +90,7 @@ public enum TranscriptRenderer {
             "",
         ]
         for segment in segments {
-            lines.append("**[\(timestamp(segment.start))] \(metadata.label(for: segment.source)):** \(segment.text)")
+            lines.append("**[\(timestamp(segment.start))] \(segment.speaker ?? metadata.label(for: segment.source)):** \(segment.text)")
             lines.append("")
         }
         if inProgress {
@@ -101,6 +101,16 @@ public enum TranscriptRenderer {
             lines.append("")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Who was heard through the meeting audio: the names the call app gave,
+    /// in order of first word, and Others for anything it didn't name.
+    static func meetingSpeakers(_ metadata: TranscriptMetadata, _ segments: [TranscriptSegment]) -> String {
+        let system = segments.filter { $0.source == .system }
+        var names: [String] = []
+        for name in system.compactMap(\.speaker) where !names.contains(name) { names.append(name) }
+        if names.isEmpty || system.contains(where: { $0.speaker == nil }) { names.append(metadata.systemLabel) }
+        return names.joined(separator: ", ")
     }
 
     /// `hh:mm:ss` from the start of the recording.

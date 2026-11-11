@@ -5,6 +5,8 @@ import UserNotifications
 /// the transcript.
 final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     private static let fileKey = "file"
+    private static let urlKey = "url"
+    private static let revealKey = "reveal"
 
     override init() {
         super.init()
@@ -15,19 +17,32 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    func post(title: String, body: String, fileURL: URL? = nil) {
+    /// - Parameters:
+    ///   - fileURL: opened on click.
+    ///   - link: a web page opened on click, with `reveal` shown in Finder.
+    func post(title: String, body: String, fileURL: URL? = nil, link: URL? = nil, reveal: URL? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        if let fileURL { content.userInfo = [Self.fileKey: fileURL.path] }
+        var info: [String: String] = [:]
+        info[Self.fileKey] = fileURL?.path
+        info[Self.urlKey] = link?.absoluteString
+        info[Self.revealKey] = reveal?.path
+        content.userInfo = info
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse) async {
-        guard let path = response.notification.request.content.userInfo[Self.fileKey] as? String else { return }
-        await MainActor.run { _ = NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+        let info = response.notification.request.content.userInfo
+        let file = info[Self.fileKey] as? String, link = info[Self.urlKey] as? String
+        let reveal = info[Self.revealKey] as? String
+        await MainActor.run {
+            if let file { NSWorkspace.shared.open(URL(fileURLWithPath: file)) }
+            if let link = link.flatMap(URL.init(string:)) { NSWorkspace.shared.open(link) }
+            if let reveal { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: reveal)]) }
+        }
     }
 
     /// Show notifications even though a menu bar app is always "in front".

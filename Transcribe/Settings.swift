@@ -14,6 +14,7 @@ final class Settings {
         static let notifications = "notifications"
         static let writeTitles = "writeTitles"
         static let tagTopics = "tagTopics"
+        static let nameSpeakers = "nameSpeakers"
     }
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -50,6 +51,11 @@ final class Settings {
         didSet { defaults.set(tagTopics, forKey: Key.tagTopics) }
     }
 
+    /// Name the other people from who the call app shows talking.
+    var nameSpeakers: Bool {
+        didSet { defaults.set(nameSpeakers, forKey: Key.nameSpeakers) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         outputDirectory = defaults.string(forKey: Key.outputDirectory).map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -60,6 +66,7 @@ final class Settings {
         notifications = defaults.object(forKey: Key.notifications) as? Bool ?? true
         writeTitles = defaults.object(forKey: Key.writeTitles) as? Bool ?? true
         tagTopics = defaults.object(forKey: Key.tagTopics) as? Bool ?? true
+        nameSpeakers = defaults.object(forKey: Key.nameSpeakers) as? Bool ?? true
     }
 
     /// Your first name, from your macOS account.

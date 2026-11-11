@@ -29,6 +29,9 @@ public final class RecordingSession {
     /// Set when the recording ended without any speech and its file was deleted.
     public private(set) var wasDiscarded = false
     public let capturesMicrophone: Bool
+    /// Set when the call app was read but its talkers couldn't be, which
+    /// usually means the app changed. Offered to the person as an issue.
+    public private(set) var speakerNamingReport: SpeakerNamingReport?
 
     public var startedAt: Date { metadata.startedAt }
     public var duration: TimeInterval { (endedAt ?? Date()).timeIntervalSince(startedAt) }
@@ -41,6 +44,7 @@ public final class RecordingSession {
     @ObservationIgnored private var microphone: MicrophoneCapture?
     @ObservationIgnored private var system: SystemAudioCapture?
     @ObservationIgnored private var consumer: Task<Void, Never>?
+    @ObservationIgnored private let callWatcher: CallWatcher?
     @ObservationIgnored private let log = Logger(subsystem: "Transcribe", category: "Session")
 
     /// Chunk length. Long enough to give the model context, short enough that
@@ -52,14 +56,20 @@ public final class RecordingSession {
     ///     Nil leaves it untagged.
     ///   - titleWriter: names and describes the meeting once it ends.
     ///     Nil leaves the transcript as it was started.
+    ///   - callWatcher: reads the call app for who is talking. Nil leaves
+    ///     the meeting audio as Others.
+    ///   - myNames: your own names, never given to anyone else in the call.
     public init(
         metadata: TranscriptMetadata,
         directory: URL,
         captureMicrophone: Bool,
         engine: TranscriptionEngine,
         tagger: TopicTagger? = nil,
-        titleWriter: TitleWriter? = nil
+        titleWriter: TitleWriter? = nil,
+        callWatcher: CallWatcher? = nil,
+        myNames: [String] = []
     ) {
+        self.callWatcher = callWatcher
         self.metadata = metadata
         self.engine = engine
         self.tagger = tagger
@@ -67,7 +77,7 @@ public final class RecordingSession {
         self.capturesMicrophone = captureMicrophone
         let fileURL = TranscriptFileNamer.uniqueURL(in: directory, for: metadata)
         self.fileURL = fileURL
-        file = TranscriptFile(url: fileURL, metadata: metadata)
+        file = TranscriptFile(url: fileURL, metadata: metadata, myNames: myNames)
         router = ChunkRouter(startedAt: metadata.startedAt,
                              sampleRate: TranscriptionEngine.sampleRate,
                              chunkDuration: Self.chunkDuration)
@@ -113,6 +123,7 @@ public final class RecordingSession {
         }
 
         try? await file.write(duration: 0, inProgress: true)
+        callWatcher?.start()
         consumer = Task { await self.transcribeChunks() }
         log.info("Recording \(self.metadata.displayTitle, privacy: .public) to \(self.fileURL.path, privacy: .public)")
     }
@@ -126,8 +137,10 @@ public final class RecordingSession {
         system?.stop()
         microphone = nil
         system = nil
+        callWatcher?.stop()
         router.finish()
         await consumer?.value
+        await checkSpeakerNaming()
         if await file.wordCount == 0 {
             // Nobody spoke: a Meet lobby you looked at and left, say. An empty
             // transcript is clutter, so it goes.
@@ -170,6 +183,23 @@ public final class RecordingSession {
         }
     }
 
+    /// Name the speakers from the whole call, and notice if the call app could
+    /// be read but never said who was talking.
+    private func checkSpeakerNaming() async {
+        guard let callWatcher else { return }
+        let samples = callWatcher.samples
+        await file.setCallSamples(samples)
+        guard let problem = SpeakerNamingHealth.problem(samples: samples, systemWords: await file.systemWordCount)
+        else { return }
+        log.error("Speaker naming in \(callWatcher.platform.rawValue, privacy: .public): \(problem, privacy: .public)")
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        speakerNamingReport = SpeakerNamingReport(
+            platform: callWatcher.platform, app: callWatcher.appDescription,
+            transcribeVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev",
+            macOSVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+            problem: problem, windows: callWatcher.dump)
+    }
+
     /// When a source last delivered sound, so the UI can show that audio is
     /// actually arriving (a missing permission shows up as silence).
     public func lastHeard(_ source: AudioSource) -> Date? {
@@ -197,6 +227,7 @@ public final class RecordingSession {
             do {
                 let words = try await engine.transcribe(chunk)
                 await file.append(words)
+                if let callWatcher { await file.setCallSamples(callWatcher.samples) }
                 chunksTranscribed += 1
                 try await file.write(duration: duration, inProgress: state == .recording)
             } catch {
