@@ -236,5 +236,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/transcribe.rb
+          # Already current: a re-run, or a cask pushed by hand.
+          if git diff --cached --quiet; then
+            echo "The cask is already at $VERSION."
+            exit 0
+          fi
           git commit -m "transcribe $VERSION"
           git push
